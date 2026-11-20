@@ -74,6 +74,14 @@ function E:set_doc(doc)
   self.drag = nil
   self.line_anchor = nil
   if self.active_key and not self:lane(self.active_key) then self.active_key = nil end
+  if self.vec_preview then
+    if self.vec_preview.key ~= self.active_key then
+      self.vec_preview = nil
+    else
+      self.vec_preview.plan = self:vectorize_plan(self.vec_preview.tol)
+      if not self.vec_preview.plan then self.vec_preview = nil end
+    end
+  end
   -- keep only selected times that still exist
   local lane = self:active_lane()
   local sel = {}
@@ -120,6 +128,7 @@ function E:set_active(key)
   if key ~= self.active_key then
     self.active_key = key
     self.selection = {}
+    self.vec_preview = nil
   end
 end
 
@@ -295,6 +304,8 @@ function E:mouse(ev)
   ev.mods = ev.mods or {}
   local kind = ev.type
   if kind ~= "exit" then self.cursor_g = self:clamp_g(G.x_to_g(self.view, ev.x)) end
+  local pfx = self:preview_mouse(ev)
+  if pfx then return pfx end
   if kind == "move" then
     return self:on_hover(ev, fx)
   elseif kind == "exit" then
@@ -852,10 +863,9 @@ end
 -- straight line already follows within `tol` (0 to 1). Works on the
 -- selection when there is one, otherwise on every editable pattern.
 -- Returns commit (or nil), removed, kept.
-function E:vectorize(tol)
-  local lane = self:active_lane()
-  if not lane then return nil, 0, 0 end
-  tol = tol or self.vectorize_tolerance or 0.02
+-- Patterns (and eligible point sets) Vectorize works on: the selection, or
+-- every editable pattern of the active lane. Returns targets, order.
+function E:vectorize_targets(lane)
   local targets, order = {}, {}
   if self:has_selection() then
     for pattern, set in pairs(self.selection) do
@@ -876,6 +886,15 @@ function E:vectorize(tol)
       end
     end
   end
+  return targets, order
+end
+
+function E:vectorize(tol)
+  local lane = self:active_lane()
+  if not lane then return nil, 0, 0 end
+  tol = tol or self.vectorize_tolerance or 0.02
+  self.vec_preview = nil
+  local targets, order = self:vectorize_targets(lane)
   local c = new_commit("Vectorize")
   local removed, kept = 0, 0
   local new_sel = {}
@@ -922,6 +941,116 @@ function E:vectorize(tol)
   if self:has_selection() then self.selection = new_sel end
   if #c.writes == 0 then return nil, removed, kept end
   return c, removed, kept
+end
+
+--------------------------------------------------------------------------------
+-- Vectorize preview: shows the simplified curve before applying it. The
+-- wheel changes the tolerance, Enter, V or a left click applies, Esc or a
+-- right click cancels.
+
+E.VEC_TOL_MAX = 0.25
+E.VEC_TOL_STEP = 0.01
+
+-- Simplified points per pattern for the current preview, plus counts.
+function E:vectorize_plan(tol)
+  local lane = self:active_lane()
+  if not lane then return nil end
+  local targets, order = self:vectorize_targets(lane)
+  local plan = { points = {}, before = 0, after = 0 }
+  for _, pattern in ipairs(order) do
+    local data = lane.data[pattern]
+    local np = P.simplify(data.points, tol, targets[pattern] or nil)
+    plan.points[pattern] = np
+    plan.before = plan.before + #data.points
+    plan.after = plan.after + #np
+  end
+  return plan
+end
+
+function E:preview_message()
+  local pv = self.vec_preview
+  if not pv then return nil end
+  return string.format("Vectorize preview: %d to %d points, tolerance %d %%. Wheel: tolerance. Enter or click: apply. Esc: cancel.",
+    pv.plan.before, pv.plan.after, math.floor(pv.tol * 100 + 0.5))
+end
+
+function E:start_vectorize()
+  local fx = { redraw = true }
+  local lane = self:active_lane()
+  if not lane then
+    fx.status = (#self:visible_lanes() == 0) and E.MSG_NO_LANE or E.MSG_NO_ACTIVE
+    return fx
+  end
+  local tol = self.vectorize_tolerance or 0.02
+  local plan = self:vectorize_plan(tol)
+  if not plan or plan.before == 0 then
+    fx.status = "Vectorize: nothing to change."
+    return fx
+  end
+  self.vec_preview = { tol = tol, plan = plan, key = lane.key }
+  fx.status = self:preview_message()
+  return fx
+end
+
+function E:set_preview_tolerance(tol)
+  local pv = self.vec_preview
+  if not pv then return nil end
+  tol = math.max(0, math.min(E.VEC_TOL_MAX, math.floor(tol * 100 + 0.5) / 100))
+  pv.tol = tol
+  pv.plan = self:vectorize_plan(tol)
+  self.vectorize_tolerance = tol
+  return { redraw = true, status = self:preview_message(), tolerance = tol }
+end
+
+function E:apply_preview()
+  local pv = self.vec_preview
+  if not pv then return nil end
+  local c, removed = self:vectorize(pv.tol)
+  return { commit = c, redraw = true, status = E.vectorize_message(c, removed) }
+end
+
+function E:cancel_preview()
+  if not self.vec_preview then return nil end
+  self.vec_preview = nil
+  return { redraw = true, status = "Vectorize cancelled." }
+end
+
+-- Points to draw for the preview: { [pattern] = points } or nil.
+function E:preview_points()
+  local pv = self.vec_preview
+  if not pv or pv.key ~= self.active_key then return nil end
+  return pv.plan and pv.plan.points
+end
+
+-- Mouse and keys while the preview is shown. Returns fx, or nil to fall
+-- through to the normal handlers.
+function E:preview_mouse(ev)
+  if not self.vec_preview then return nil end
+  if ev.type == "wheel" then
+    local up = (ev.direction == "up" or ev.direction == "right")
+    if ev.mods.control then return nil end -- zoom still works
+    return self:set_preview_tolerance(self.vec_preview.tol + (up and E.VEC_TOL_STEP or -E.VEC_TOL_STEP))
+  elseif ev.type == "down" then
+    if ev.button == "left" then return self:apply_preview() end
+    return self:cancel_preview()
+  elseif ev.type == "move" or ev.type == "exit" then
+    return nil
+  end
+  return {}
+end
+
+function E:preview_key(name)
+  if not self.vec_preview then return nil end
+  if name == "return" or name == "enter" or name == "numpad enter" or name == "v" then
+    return self:apply_preview()
+  elseif name == "esc" then
+    return self:cancel_preview()
+  elseif name == "up" or name == "right" then
+    return self:set_preview_tolerance(self.vec_preview.tol + E.VEC_TOL_STEP)
+  elseif name == "down" or name == "left" then
+    return self:set_preview_tolerance(self.vec_preview.tol - E.VEC_TOL_STEP)
+  end
+  return nil
 end
 
 function E.vectorize_message(commit, removed)
@@ -984,6 +1113,10 @@ end
 
 function E:key(name, mods)
   mods = mods or {}
+  if not mods.control and not mods.alt then
+    local pfx = self:preview_key(name)
+    if pfx then return pfx end
+  end
   local fx = { redraw = true }
   if mods.control and not mods.alt then
     if name == "c" then
@@ -1021,10 +1154,7 @@ function E:key(name, mods)
     end
     return nil
   elseif name == "v" and not mods.shift then
-    local c, removed = self:vectorize()
-    fx.commit = c
-    fx.status = E.vectorize_message(c, removed)
-    return fx
+    return self:start_vectorize()
   elseif not mods.shift and E.TOOL_KEYS[name] then
     self.tool = E.TOOL_KEYS[name]
     self.line_anchor = nil

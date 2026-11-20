@@ -429,6 +429,35 @@ function R.draw(ctx, scene)
     ctx.global_alpha = 255
   end
 
+  -- Vectorize preview: simplified active curve, dashed, with its points
+  if scene.preview and active then
+    ctx.stroke_color = rgba(colors.selection, 230)
+    ctx.line_width = d.line_active
+    ctx:set_line_dash({ 6 * d.zoom, 4 * d.zoom })
+    local vis = visible_segments(view, segments)
+    local half = math.max(2, math.floor(d.point_size and d.point_size / 2 or 3 * d.zoom))
+    for i = 1, #vis do
+      local s = vis[i]
+      local pts = s.editable and scene.preview[s.pattern]
+      if pts and #pts > 0 then
+        ctx:begin_path()
+        for k = 1, #pts do
+          local x = G.g_to_x(view, s.offset - P.UNITS + pts[k].t)
+          local y = G.v_to_y(view, pts[k].v)
+          if k == 1 then ctx:move_to(x, y) else ctx:line_to(x, y) end
+        end
+        ctx:stroke()
+        ctx.fill_color = rgba(colors.selection, 255)
+        for k = 1, #pts do
+          local x = G.g_to_x(view, s.offset - P.UNITS + pts[k].t)
+          local y = G.v_to_y(view, pts[k].v)
+          ctx:fill_rect(x - half, y - half, 2 * half, 2 * half)
+        end
+      end
+    end
+    ctx:set_line_dash({})
+  end
+
   -- overlays
   local ov = scene.overlay or {}
   if ov.rect then

@@ -266,7 +266,7 @@ function App:build()
   }
   views.vectorize = vb:button {
     text = "Vectorize", width = L.W.vectorize, height = ch,
-    tooltip = "Vectorize (V): switch the active lane (or the selection) to Lines and remove the points a straight line already follows (tolerance in Settings)",
+    tooltip = "Vectorize (V): preview the active lane (or the selection) as Lines without the points a straight line already follows. Wheel: tolerance, Enter or click: apply, Esc: cancel",
     notifier = function() self:vectorize() end,
   }
   views.add_lane = vb:button {
@@ -553,6 +553,7 @@ function App:render(ctx)
       colors = self:resolve_colors(),
       cache = self.cache,
       overlay = self.overlay,
+      preview = self.editor:preview_points(),
     }
     local stats = R.draw(ctx, scene)
     local dt = os.clock() - t0
@@ -872,6 +873,7 @@ function App:apply_fx(fx)
     if fx.hover then self:show_hover(fx.hover) else self:hide_hover() end
   end
   if fx.status then self:set_status(fx.status) end
+  if fx.tolerance then self.prefs.vectorize_tolerance.value = math.floor(fx.tolerance * 100 + 0.5) end
   if fx.tool then self:refresh_tool() end
   if fx.view then
     self:update_scrollbar()
@@ -987,8 +989,11 @@ function App:vectorize()
     self:set_status(E.MSG_NO_ACTIVE)
     return
   end
-  local c, removed = self.editor:vectorize()
-  self:apply_fx({ commit = c, redraw = true, status = E.vectorize_message(c, removed) })
+  if self.editor.vec_preview then
+    self:apply_fx(self.editor:apply_preview())
+  else
+    self:apply_fx(self.editor:start_vectorize())
+  end
 end
 
 function App:set_mode(v)
