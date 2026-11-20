@@ -346,6 +346,8 @@ T.test("right-click menu like the native editor", function()
     local dlg = env.dialogs[#env.dialogs]
     local canvas = canvas_of(dlg)
     mouse(canvas, "down", 50, 50, "right")
+    T.eq(#env.menus, 0, "no menu on press")
+    mouse(canvas, "up", 50, 50, "right")
     local menu = env.menus[#env.menus]
     T.ok(menu, "menu shown")
     local names = {}

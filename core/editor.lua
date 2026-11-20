@@ -363,7 +363,9 @@ function E:on_down(ev, fx)
       self.selection = { [p.pattern] = { [p.t] = true } }
       fx.redraw = true
     end
-    fx.menu = "context"
+    -- the menu opens on release: opened on press, the release could land
+    -- on the menu and close it at once
+    self.menu_pending = true
     return fx
   end
   -- delete: Alt + left click on a point of the active lane
@@ -661,6 +663,11 @@ function E:on_drag(ev, fx)
 end
 
 function E:on_up(ev, fx)
+  if ev.button == "right" and self.menu_pending then
+    self.menu_pending = false
+    fx.menu = "context"
+    return fx
+  end
   local d = self.drag
   if not d then return fx end
   self.drag = nil
