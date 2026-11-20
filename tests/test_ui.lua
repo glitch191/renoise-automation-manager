@@ -401,7 +401,7 @@ T.test("every Settings row has a tooltip on its label and control", function()
       for _, c in ipairs(v.views or {}) do walk(c) end
     end
     walk(sd.content)
-    T.eq(labels, 10)
+    T.eq(labels, 9)
   end)
   no_errors()
 end)

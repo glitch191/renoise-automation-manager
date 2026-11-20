@@ -62,8 +62,6 @@ function E.new(opts)
   self.live_writes = (opts.live_writes ~= false)
   self.clock = opts.clock or os.clock
   self.random = opts.random or math.random
-  -- Link patterns: keep the curve continuous across pattern borders
-  self.link_patterns = opts.link_patterns == true
   self.last_live = nil
   return self
 end
@@ -582,110 +580,6 @@ function E:apply_move(lane, d, dt, dv)
     if next(set) then sel[pattern] = set end
   end
   return sel
-end
-
--- Link patterns. Renoise plays each pattern's automation on its own: the
--- value holds after the last point of a pattern and before the first point
--- of the next one. When linking is on, the tool keeps a border point on
--- each side (last 1/256 of the first pattern, first position of the next)
--- so the curve is continuous:
---   * next to a read only neighbor, the editable border point takes the
---     neighbor's value at the border;
---   * when the edit touched only one of the two patterns and it has a
---     border point, the other side follows that point;
---   * otherwise both border points go on the straight line between the
---     last point before the border and the first point after it.
--- Only editable patterns are written; repeated patterns are left alone.
-
--- Border points of one lane for every pair of adjacent patterns. Adds the
--- writes to commit c (creating it when nil). Returns c.
-function E:link_lane(c, lane, written)
-  written = written or {}
-  local segs = self:segments()
-  for i = 1, #segs - 1 do
-    local A, B = segs[i], segs[i + 1]
-    local da, db = lane.data[A.pattern], lane.data[B.pattern]
-    if A.offset + A.len_g == B.offset and A.pattern ~= B.pattern and (A.editable or B.editable)
-        and da and db and da.exists and db.exists and #da.points > 0 and #db.points > 0 then
-      local a_end, b_start = P.max_t(A.lines), P.min_t()
-      local function point_at(data, t)
-        for k = 1, #data.points do
-          if data.points[k].t == t then return data.points[k] end
-        end
-        return nil
-      end
-      local va, vb -- new border values (nil: leave that side alone)
-      if A.editable and B.editable then
-        local ea, eb = point_at(da, a_end), point_at(db, b_start)
-        if written[B.pattern] and not written[A.pattern] and eb then
-          va = eb.v -- the edited side leads, the other follows
-        elseif written[A.pattern] and not written[B.pattern] and ea then
-          vb = ea.v
-        else
-          -- straight line between the last point before the border and the
-          -- first point after it
-          local pa, pb
-          for k = #da.points, 1, -1 do
-            if da.points[k].t < a_end then pa = da.points[k] break end
-          end
-          for k = 1, #db.points do
-            if db.points[k].t > b_start then pb = db.points[k] break end
-          end
-          if pa and pb then
-            local ga, gb = T.global(A, pa.t), T.global(B, pb.t)
-            local function at(g) return pa.v + (pb.v - pa.v) * (g - ga) / (gb - ga) end
-            va, vb = at(T.global(A, a_end)), at(T.global(B, b_start))
-          end
-        end
-      elseif B.editable then
-        -- read only neighbor before: continue from its value at the border
-        va = nil
-        vb = I.value_at(da.points, da.playmode or lane.playmode, a_end)
-      else
-        va = I.value_at(db.points, db.playmode or lane.playmode, b_start)
-      end
-      local ends = { { seg = A, data = da, t = a_end, v = va }, { seg = B, data = db, t = b_start, v = vb } }
-      for _, e in ipairs(ends) do
-        if e.v and e.seg.editable then
-          local cur = point_at(e.data, e.t)
-          if not cur or math.abs(cur.v - e.v) > 1e-9 then
-            c = c or new_commit("Link patterns")
-            set_points(lane, e.seg.pattern, P.add(e.data.points, e.t, P.clamp_v(e.v), 0))
-            put_write(c, lane, e.seg.pattern, e.data.points)
-          end
-        end
-      end
-    end
-  end
-  return c
-end
-
--- Add the border points of the lanes a commit touches (same undo step).
-function E:add_links(c)
-  if not self.link_patterns or not c then return c end
-  local seen = {}
-  local writes = {}
-  for i = 1, #c.writes do writes[i] = c.writes[i] end
-  local written = {}
-  for _, w in ipairs(writes) do
-    written[w.key] = written[w.key] or {}
-    written[w.key][w.pattern] = true
-  end
-  for _, w in ipairs(writes) do
-    if not w.delete and not seen[w.key] then
-      seen[w.key] = true
-      local lane = self:lane(w.key)
-      if lane then self:link_lane(c, lane, written[w.key]) end
-    end
-  end
-  return c
-end
-
--- Link every visible lane now (when the option is turned on).
-function E:link_all()
-  local c
-  for _, lane in ipairs(self:visible_lanes()) do c = self:link_lane(c, lane) end
-  return c
 end
 
 -- Magnet to pattern borders, like the native editor: a time within a few

@@ -28,7 +28,6 @@ App.SETTING_TIPS = {
   ["Default tool"] = "Tool selected when the window opens: Edit (add, move, select points), Pencil (freehand), Line (straight ramps) or Range (a time range over every visible curve).",
   ["Inactive curve opacity"] = "How visible the curves that are not active are, from 10 to 90 % (default 35 %). The active curve is always drawn opaque, on top, with its points.",
   ["Snap"] = "Snap points to the time grid chosen next to Snap in the toolbar (line, 1/2, 1/4, 1/8 of a line or free). Hold Shift while dragging to place a point freely.",
-  ["Link patterns"] = "Join each curve across pattern borders: border points keep the curve continuous from one pattern to the next, and are kept up to date after every edit (same undo step). Next to a read only neighbor, the editable side takes the neighbor's value.",
   ["Write while dragging"] = "Write drags and pencil strokes to the song while the mouse moves, so the native Automation editor follows live (still one undo step). Off: the song is written when the mouse button is released.",
   ["Follow playback"] = "While Renoise plays, show the playing pattern and scroll with the playhead. Off: the view stays on the selected pattern.",
   ["Diagnostics"] = "Show a line with the number of curves and points drawn, the canvas render time (average and worst) and the playhead update rate. Useful to check performance.",
@@ -164,7 +163,6 @@ function App:start_session()
     snap = p.snap_enabled.value,
     grid = E.GRIDS[p.snap_grid.value] or 256,
     live_writes = p.live_writes.value,
-    link_patterns = p.link_patterns.value,
   })
   self.app_observers:clear("theme")
   self.app_observers:add("theme", renoise.app().theme_observable, function()
@@ -971,7 +969,6 @@ end
 function App:apply_fx(fx)
   if not fx then return end
   if fx.commit then
-    self.editor:add_links(fx.commit)
     self.session:commit(fx.commit)
     if fx.commit.writes and #fx.commit.writes > 0 then self:refresh_interp() end
   end
@@ -1279,8 +1276,6 @@ function App:context_menu()
       invoke = run(function() return ed:scale_selection(f / 100, "bottom") end) }
   end
   local more = {
-    { name = "---Link Patterns", selected = self.prefs.link_patterns.value,
-      invoke = function() self:set_link_patterns(not self.prefs.link_patterns.value) end },
     { name = "---Lock Zoom", selected = self.prefs.lock_zoom.value,
       invoke = function() self.prefs.lock_zoom.value = not self.prefs.lock_zoom.value end },
     { name = "Zoom Out Fully", invoke = function() self:fit() end },
@@ -1295,20 +1290,6 @@ function App:context_menu()
   }
   for _, e in ipairs(more) do entries[#entries + 1] = e end
   renoise.app():show_menu(self.dialog, entries)
-end
-
--- Link patterns option: on, the curves are joined across pattern borders
--- right away and after every edit.
-function App:set_link_patterns(on)
-  self.prefs.link_patterns.value = on and true or false
-  self.editor.link_patterns = self.prefs.link_patterns.value
-  if on then
-    local c = self.editor:link_all()
-    self:apply_fx({ commit = c, redraw = true,
-      status = c and "Link patterns: curves joined across pattern borders." or "Link patterns on." })
-  else
-    self:set_status("Link patterns off.")
-  end
 end
 
 function App:select_tool(name)
@@ -1484,10 +1465,6 @@ function App:show_settings()
         if self.editor then self:set_snap(v) else p.snap_enabled.value = v end
         if self.views then self.views.snap.value = v end
       end,
-    }),
-    row("Link patterns", vb:checkbox {
-      value = p.link_patterns.value,
-      notifier = function(v) if self.editor then self:set_link_patterns(v) else p.link_patterns.value = v end end,
     }),
     row("Write while dragging", vb:checkbox {
       value = p.live_writes.value,

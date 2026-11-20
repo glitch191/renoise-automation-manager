@@ -698,46 +698,6 @@ T.test("magnet: Shift turns it off; far from a border nothing changes", function
   T.eq(v, 0.31, "value too far from the previous pattern's end: kept")
 end)
 
-T.test("link patterns: border points on the line between the two patterns", function()
-  -- last point of pattern 1 at line 12 (0.2), first of pattern 2 at line 4 (0.6)
-  local doc = two_pattern_doc({ 256, 0.1, 256 * 13, 0.2 }, { 256 * 5, 0.6, 256 * 9, 0.4 })
-  local ed = setup(doc)
-  ed.link_patterns = true
-  local c = ed:link_all()
-  T.eq(c.description, "Multi Automation: Link patterns")
-  local a, b = doc.lanes[1].data[1].points, doc.lanes[1].data[2].points
-  local ga, gb = 12 * 256, 16 * 256 + 4 * 256
-  local function on_line(g) return 0.2 + 0.4 * (g - ga) / (gb - ga) end
-  T.eq(a[#a].t, P.max_t(16))
-  T.near(a[#a].v, on_line(16 * 256 - 1), 1e-9)
-  T.eq(b[1].t, P.min_t())
-  T.near(b[1].v, on_line(16 * 256), 1e-9)
-  T.eq(ed:link_all(), nil, "already linked")
-  -- an edit of the last real point updates the border points in the same commit
-  ed.selection = { [1] = { [256 * 13] = true } }
-  local s = ed:shift_selection(-256)
-  ed:add_links(s)
-  local pa = nil
-  for _, w in ipairs(s.writes) do if w.pattern == 2 then pa = w end end
-  T.ok(pa, "pattern 2 border updated in the same undo step")
-end)
-
-T.test("link patterns: neighbor patterns stay read only", function()
-  local doc = X.doc({
-    { seq = 1, pattern = 1, lines = 16 },
-    { seq = 2, pattern = 2, lines = 16 },
-  }, { lanes = 1, points = 0, editable = function(seq) return seq == 1 end })
-  local lane = doc.lanes[1]
-  lane.data[1] = { points = pts({ 256 * 13, 0.2 }), exists = true, rev = 1, lines = 16, playmode = 2 }
-  lane.data[2] = { points = pts({ 256 * 5, 0.6 }), exists = true, rev = 1, lines = 16, playmode = 2 }
-  local ed = setup(doc)
-  ed.link_patterns = true
-  local c = ed:link_all()
-  T.eq(#c.writes, 1)
-  T.eq(c.writes[1].pattern, 1)
-  T.eq(#lane.data[2].points, 1, "neighbor untouched")
-end)
-
 T.test("double-click on a point deletes it, on empty space adds one", function()
   local doc = one_lane_doc(pts({ 256, 0.1, 512 + 256, 0.5, 2048, 0.3 }))
   local ed = setup(doc)
@@ -790,40 +750,4 @@ T.test("border point grabbed from the gray side moves and sticks to the previous
   for _, w in ipairs(fx.commit.writes) do if w.pattern == 2 then p = w.points end end
   T.eq(p[1].t, 256)
   T.eq(p[1].v, 0.55, "value of the previous pattern at the border")
-end)
-
-T.test("link patterns keeps the magnet result next to a read only neighbor", function()
-  local doc = X.doc({ { seq = 1, pattern = 1, lines = 64 }, { seq = 2, pattern = 2, lines = 64 } },
-    { lanes = 1, points = 0, editable = function(seq) return seq == 2 end })
-  local lane = doc.lanes[1]
-  lane.playmode = 2
-  lane.data[1] = { points = pts({ 256, 1, 256 * 60, 0.5, 64 * 256 + 255, 0.55 }), exists = true, rev = 1, lines = 64, playmode = 2 }
-  lane.data[2] = { points = pts({ 256, 0.45, 256 * 11, 0.4, 256 * 48, 0.25 }), exists = true, rev = 1, lines = 64, playmode = 2 }
-  local ed = setup(doc)
-  ed.live_writes = false
-  ed.link_patterns = true
-  local bx = G.g_to_x(ed.view, 64 * 256)
-  ed:mouse(ev("down", bx, G.v_to_y(ed.view, 0.45)))
-  local y2 = G.v_to_y(ed.view, 0.55) + 3
-  ed:mouse(ev("drag", bx, y2))
-  local fx = ed:mouse(ev("up", bx, y2))
-  ed:add_links(fx.commit) -- what the window does before writing
-  T.eq(lane.data[2].points[1].t, 256)
-  T.eq(lane.data[2].points[1].v, 0.55, "still on the previous pattern's end value")
-end)
-
-T.test("link patterns: the edited side leads when both patterns are editable", function()
-  local doc = two_pattern_doc({ 256, 0.1, 256 * 13, 0.2, P.max_t(16), 0.3 }, { 256, 0.3, 256 * 9, 0.4 })
-  local ed = setup(doc)
-  ed.link_patterns = true
-  -- move the start point of pattern 2 to 0.6: the end of pattern 1 follows
-  local lane = doc.lanes[1]
-  local c = { description = "x", batch = false, writes = {} }
-  lane.data[2].points = pts({ 256, 0.6, 256 * 9, 0.4 })
-  c.writes[1] = { key = lane.key, pattern = 2, points = lane.data[2].points }
-  ed:add_links(c)
-  local a = lane.data[1].points
-  T.eq(a[#a].t, P.max_t(16))
-  T.eq(a[#a].v, 0.6)
-  T.eq(lane.data[2].points[1].v, 0.6, "edited point kept")
 end)
