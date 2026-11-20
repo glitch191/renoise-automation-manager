@@ -221,33 +221,39 @@ end)
 T.test("cross selection works both ways without loops", function()
   local song, p = make_song()
   local s, calls = session(song)
-  local fired = 0
-  song.selected_automation_parameter_observable:add_notifier(function() fired = fired + 1 end)
-  -- tool -> Renoise: set_active selects the parameter (observable fires once)
-  local orig = song.selected_automation_parameter_observable
+  -- tool -> Renoise
   s:set_active(s.doc.lanes[2].key)
-  T.ok(song.selected_automation_parameter == nil or true)
-  -- simulate Renoise assigning and notifying
-  song:select_param(p.fb)
-  s:idle()
-  T.eq(#calls.activate, 0, "already active, no callback")
+  T.ok(rawequal(song.selected_automation_parameter, p.fb))
+  T.ok(not s.dirty.selection, "own assignment ignored")
+  -- the same lane again: no second assignment
+  local n = song.selection_assignments
+  s:set_active(s.doc.lanes[2].key)
+  T.eq(song.selection_assignments, n)
+  -- Renoise -> tool
   song:select_param(p.cutoff)
   s:idle()
   T.eq(calls.activate[1], s.doc.lanes[1].key)
-  T.ok(orig == song.selected_automation_parameter_observable)
+  T.eq(s.active_key, s.doc.lanes[1].key)
 end)
 
-T.test("set_active assigns selected_automation_parameter without re-entry", function()
+T.test("selection on another track is ignored when the view is locked", function()
   local song, p = make_song()
-  local s = session(song)
-  -- make the mock fire the observable on assignment like Renoise does
-  local raw = song
-  setmetatable(raw, { __newindex = function(t, k, v)
-    rawset(t, k, v)
-  end })
-  s:set_active(s.doc.lanes[2].key)
-  T.ok(song.selected_automation_parameter == p.fb)
-  T.ok(not s.dirty.selection)
+  local s, calls = session(song)
+  s:set_lock(true)
+  s:idle()
+  song.selected_track_index = 2
+  song:select_param(p.cutoff)
+  s:idle()
+  T.eq(#calls.activate, 0)
+end)
+
+T.test("mode changes rebuild without comparing parameters with ==", function()
+  local song, p = make_song()
+  song:select_param(p.fb)
+  for _, mode in ipairs({ S.MODE_RANGE, S.MODE_NEIGHBOURS, S.MODE_CURRENT }) do
+    local s = session(song, mode)
+    T.eq(s.active_key, NATIVE .. "Delay#1:1", "selected parameter restored as active lane")
+  end
 end)
 
 T.test("deleting a track, a device or an automation never raises", function()

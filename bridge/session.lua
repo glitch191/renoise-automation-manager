@@ -202,7 +202,7 @@ function S:rebuild(reason)
   self.doc = doc
   self:subscribe_content()
   -- restore the active lane: Renoise selection first, then the stored one
-  local key = self:lane_key_for_param(song.selected_automation_parameter)
+  local key = self:selected_lane_key()
   if not key then key = self:track_data().active end
   if key and not self:lane(key) then key = nil end
   if not key and doc.lanes[1] then
@@ -223,12 +223,23 @@ function S:lane(key)
   return nil
 end
 
-function S:lane_key_for_param(param)
-  if not param or not self.doc then return nil end
-  for i = 1, #self.doc.lanes do
-    local lane = self.doc.lanes[i]
-    local p = IO.lane_param(self.song, self.doc, lane)
-    if p and p == param then return lane.key end
+-- Key of the lane matching the parameter selected in the native Automation
+-- editor. Renoise DeviceParameter and AudioDevice objects cannot be compared
+-- with ==, so the match uses the device (path and display name) and the
+-- parameter name, on the selected track only.
+function S:selected_lane_key()
+  local song, doc = self.song, self.doc
+  if not doc or song.selected_track_index ~= doc.track_index then return nil end
+  local param = song.selected_automation_parameter
+  local dev = song.selected_automation_device
+  if not param or not dev then return nil end
+  local path, dname, pname = dev.device_path, dev.display_name, param.name
+  for i = 1, #doc.lanes do
+    local lane = doc.lanes[i]
+    local p, d = IO.lane_param(song, doc, lane)
+    if p and d and d.device_path == path and d.display_name == dname and p.name == pname then
+      return lane.key
+    end
   end
   return nil
 end
@@ -254,7 +265,7 @@ function S:idle(busy)
   end
   if self.dirty.selection then
     self.dirty.selection = false
-    local key = self:lane_key_for_param(self.song.selected_automation_parameter)
+    local key = self:selected_lane_key()
     if key and key ~= self.active_key then
       self.active_key = key
       self:track_data().active = key
@@ -297,7 +308,7 @@ function S:set_active(key)
   local lane = self:lane(key)
   if not lane then return end
   local param = IO.lane_param(self.song, self.doc, lane)
-  if param and self.song.selected_automation_parameter ~= param then
+  if param and self:selected_lane_key() ~= key then
     self.syncing_selection = true
     local ok, err = pcall(function() self.song.selected_automation_parameter = param end)
     self.syncing_selection = false

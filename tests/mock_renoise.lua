@@ -58,6 +58,14 @@ M.stats = { value_reads = 0, value_writes = 0 }
 --------------------------------------------------------------------------------
 -- parameters and devices
 
+-- Renoise DeviceParameter and AudioDevice objects have no __eq: comparing two
+-- of them with == raises. The mock does the same (one shared metamethod, so
+-- Lua calls it for any two distinct mock objects).
+local function no_eq()
+  error("unknown property or function '__eq' for an object of type 'DeviceParameter'", 2)
+end
+M.no_eq = no_eq
+
 function M.param(name, opts)
   opts = opts or {}
   local raw = {
@@ -82,11 +90,13 @@ function M.param(name, opts)
       end
       raw[k] = v
     end,
+    __eq = no_eq,
   })
 end
 
 function M.device(path, display_name, params)
-  return { device_path = path, display_name = display_name, name = display_name, parameters = params }
+  return setmetatable({ device_path = path, display_name = display_name, name = display_name, parameters = params },
+    { __eq = no_eq })
 end
 
 --------------------------------------------------------------------------------
@@ -143,7 +153,7 @@ local function new_pattern_track(song, pattern, track)
   function pt:find_automation(param)
     if self._track._dead then error("track deleted", 2) end
     for _, a in ipairs(self.automation) do
-      if a.dest_parameter == param then return a end
+      if rawequal(a.dest_parameter, param) then return a end
     end
     return nil
   end
@@ -153,7 +163,7 @@ local function new_pattern_track(song, pattern, track)
     local dev
     for _, d in ipairs(self._track.devices) do
       for _, p in ipairs(d.parameters) do
-        if p == param then dev = d end
+        if rawequal(p, param) then dev = d end
       end
     end
     local a = new_automation(param, dev, self._pattern.number_of_lines)
@@ -164,7 +174,7 @@ local function new_pattern_track(song, pattern, track)
   end
   function pt:delete_automation(param)
     for i, a in ipairs(self.automation) do
-      if a.dest_parameter == param then
+      if rawequal(a.dest_parameter, param) then
         table.remove(self.automation, i)
         a.points_observable.owner = { _dead = true }
         a.playmode_observable.owner = { _dead = true }
@@ -190,7 +200,37 @@ function M.song(spec)
   song.selected_automation_parameter_observable = M.observable()
   song.selected_track_index = 1
   song.selected_sequence_index = 1
-  song.selected_automation_parameter = nil
+  -- selected_automation_parameter / _device behave like Renoise properties:
+  -- assigning the parameter also sets its device and fires the observable.
+  song._sel_param = nil
+  song.selection_assignments = 0
+  setmetatable(song, {
+    __index = function(t, k)
+      if k == "selected_automation_parameter" then return rawget(t, "_sel_param") end
+      if k == "selected_automation_device" then
+        local p = rawget(t, "_sel_param")
+        if not p then return nil end
+        for _, track in ipairs(t.tracks) do
+          for _, d in ipairs(track.devices) do
+            for _, q in ipairs(d.parameters) do
+              if rawequal(q, p) then return d end
+            end
+          end
+        end
+        return nil
+      end
+      return nil
+    end,
+    __newindex = function(t, k, v)
+      if k == "selected_automation_parameter" then
+        rawset(t, "_sel_param", v)
+        rawset(t, "selection_assignments", t.selection_assignments + 1)
+        t.selected_automation_parameter_observable:fire()
+      else
+        rawset(t, k, v)
+      end
+    end,
+  })
   song.transport = {
     playing = false, lpb = 4, follow_player = true,
     playback_pos = { sequence = 1, line = 1 },
@@ -219,7 +259,7 @@ function M.song(spec)
     for _, pattern in ipairs(song.patterns) do
       for _, pt in ipairs(pattern.tracks) do
         for _, a in ipairs(pt.automation) do
-          if a.dest_parameter == param then return true end
+          if rawequal(a.dest_parameter, param) then return true end
         end
       end
     end
@@ -243,7 +283,6 @@ function M.song(spec)
   end
   function song:select_param(p)
     self.selected_automation_parameter = p
-    self.selected_automation_parameter_observable:fire()
   end
   function song:delete_track(i)
     local track = table.remove(self.tracks, i)
@@ -266,7 +305,7 @@ function M.song(spec)
       local pt = pattern.tracks[ti]
       for k = #pt.automation, 1, -1 do
         local a = pt.automation[k]
-        if a.dest_device == dev then
+        if rawequal(a.dest_device, dev) then
           a.points_observable.owner = { _dead = true }
           a.playmode_observable.owner = { _dead = true }
           table.remove(pt.automation, k)
