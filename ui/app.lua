@@ -17,6 +17,7 @@ App.__index = App
 App.TITLE = "renoise-automation-manager"
 App.LABEL_POOL = 24
 App.RULER_POOL = 48
+App.GRIP_INTERVAL = 0.03 -- seconds between two live resizes
 App.STATUS_SECONDS = 6
 
 local function log(msg)
@@ -349,7 +350,7 @@ function App:build()
     width = d.playhead_w, height = d.canvas_h, mode = "transparent", visible = false,
     render = function(ctx)
       ctx.fill_color = theme_color(THEME.playhead)
-      ctx:fill_rect(0, 0, d.playhead_w, d.canvas_h)
+      ctx:fill_rect(0, 0, self.d.playhead_w, self.d.canvas_h)
     end,
   }
   local hm = d.point_size + 6
@@ -419,7 +420,7 @@ function App:build()
   views.grip = vb:canvas {
     width = d.grip_w, height = d.status_h, mode = "transparent",
     cursor = "resize_edge_diagonal_right",
-    tooltip = "Drag to resize the window (applied when the mouse button is released)",
+    tooltip = "Drag to resize the window",
     mouse_events = { "down", "drag", "up" },
     mouse_handler = function(ev) return self:on_grip(ev) end,
     render = function(ctx) self:render_grip(ctx) end,
@@ -476,9 +477,42 @@ function App:render_grip(ctx)
   end
 end
 
--- Drag the grip: the target size is shown while dragging and applied (as a
--- custom size) on release. Renoise dialogs cannot be resized by their
--- border, so the window is rebuilt at the new size.
+-- Resize the views of the open window in place (no rebuild), so the
+-- dialog follows the grip while dragging. Legend rows are only hidden when
+-- the window gets shorter; new rows need a rebuild (done on release).
+-- Returns true when the legend would need more rows than were built.
+function App:resize_live(w, h)
+  local v = self.views
+  if not v then return false end
+  local p = self.prefs
+  local d = L.compute(w, h, p.ui_zoom.value, p.legend_visible.value)
+  local built = #v.rows
+  local need_rows = p.legend_visible.value and d.legend_rows > built
+  if p.legend_visible.value then d.legend_rows = math.min(d.legend_rows, built) end
+  self.d = d
+  self.editor.dims = d
+  v.canvas.width, v.canvas.height = d.canvas_w, d.canvas_h
+  v.hscroll.width = d.canvas_w
+  v.playhead.height = d.canvas_h
+  v.empty.width = d.canvas_w
+  v.empty.origin = { x = 0, y = math.floor(d.canvas_h / 2 - d.label_h / 2) }
+  v.zoom.width = math.floor(d.total_w * 0.3)
+  v.status.width = math.floor(d.total_w * 0.35)
+  v.diag.width = math.max(1, math.floor(d.total_w * 0.35) - 2 * d.margin - d.grip_w)
+  for i = 1, built do v.rows[i].row.visible = i <= d.legend_rows end
+  if v.legend_scroll then v.legend_scroll.height = math.max(1, d.legend_rows) * d.row_h end
+  self.view.width, self.view.height = d.canvas_w, d.canvas_h
+  G.clamp(self.view, self.editor:total_g())
+  self:update_scrollbar()
+  self:after_view_change()
+  return need_rows
+end
+
+-- Drag the grip: the window follows the mouse (views resized in place,
+-- about 30 times per second) and the size is saved as the Custom size on
+-- release. Renoise dialogs cannot be resized by their border. Mouse
+-- positions are relative to the grip, which moves with the corner, so each
+-- event adds its offset to the current size.
 function App:on_grip(ev)
   local ok, err = pcall(function()
     local x = ev.position and ev.position.x or 0
@@ -486,20 +520,28 @@ function App:on_grip(ev)
     local p = self.prefs
     if ev.type == "down" then
       local w, h = Prefs.size(p)
-      self.grip = { x0 = x, y0 = y, w = w, h = h, tw = w, th = h }
+      self.grip = { x0 = x, y0 = y, w = w, h = h, cw = w, ch = h, t = nil, need_rows = false }
     elseif self.grip and (ev.type == "drag" or ev.type == "up") then
       local g = self.grip
-      g.tw, g.th = L.clamp_size(g.w + (x - g.x0), g.h + (y - g.y0), p.ui_zoom.value, p.legend_visible.value)
+      local now = os.clock()
+      if ev.type == "drag" and g.t and now - g.t < App.GRIP_INTERVAL and now >= g.t then return end
+      g.t = now
+      local tw, th = L.clamp_size(g.cw + (x - g.x0), g.ch + (y - g.y0), p.ui_zoom.value, p.legend_visible.value)
+      if tw ~= g.cw or th ~= g.ch then
+        if self:resize_live(tw, th) then g.need_rows = true end
+        g.cw, g.ch = tw, th
+      end
       if ev.type == "drag" then
-        self:set_status(string.format("Window size: %d x %d (release to apply)", g.tw, g.th))
+        self:set_status(string.format("Window size: %d x %d", g.cw, g.ch))
       else
         self.grip = nil
-        if g.tw ~= g.w or g.th ~= g.h then
-          p.width.value = g.tw
-          p.height.value = g.th
+        if g.cw ~= g.w or g.ch ~= g.h then
+          p.width.value = g.cw
+          p.height.value = g.ch
           p.size_preset.value = #L.PRESETS + 1
-          -- rebuild outside the mouse handler of the dialog being replaced
-          self.pending_rebuild = true
+          -- more legend rows fit: rebuild outside the mouse handler
+          if g.need_rows then self.pending_rebuild = true end
+          self:set_status(string.format("Window size: %d x %d", g.cw, g.ch))
         end
       end
     end
