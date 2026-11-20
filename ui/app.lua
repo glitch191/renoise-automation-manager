@@ -972,6 +972,10 @@ function App:apply_fx(fx)
   if fx.hover ~= nil then
     if fx.hover then self:show_hover(fx.hover) else self:hide_hover() end
   end
+  if fx.goto_seq then
+    self.session:select_sequence(fx.goto_seq)
+    self.session:idle(false)
+  end
   if fx.status then self:set_status(fx.status) end
   if fx.tool then self:refresh_tool() end
   if fx.view then

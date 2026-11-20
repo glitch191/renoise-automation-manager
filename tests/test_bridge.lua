@@ -374,3 +374,15 @@ T.test("a delete write removes the automation and rebuilds the lanes", function(
   s:idle()
   T.eq(s.doc.lanes[1].name, "Delay: Feedback", "Cutoff lane gone from the current pattern")
 end)
+
+T.test("select_sequence moves Renoise and rebuilds around the new center", function()
+  local song = make_song()
+  song.selected_sequence_index = 2
+  local s = session(song, S.MODE_NEIGHBORS)
+  T.ok(s:select_sequence(3))
+  T.eq(song.selected_sequence_index, 3)
+  s:idle()
+  local segs = s.doc.timeline.segments
+  for _, sg in ipairs(segs) do T.eq(sg.editable, sg.seq == 3) end
+  T.eq(s:select_sequence(99), false)
+end)

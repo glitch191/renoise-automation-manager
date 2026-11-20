@@ -363,6 +363,20 @@ function S:set_hidden(key, hidden)
   if lane then lane.hidden = hidden and true or false end
 end
 
+-- Select a sequence position in Renoise (the pattern editor follows) and
+-- rebuild the view around it.
+function S:select_sequence(seq)
+  local song = self.song
+  if seq < 1 or seq > #song.sequencer.pattern_sequence then return false end
+  local ok, err = pcall(function() song.selected_sequence_index = seq end)
+  if not ok then
+    self.log("[sequence] " .. tostring(err))
+    return false
+  end
+  self.dirty.structure = true
+  return true
+end
+
 -- Pattern that receives new lanes: the center pattern of the view.
 function S:target_pattern()
   if not self.doc then return nil end

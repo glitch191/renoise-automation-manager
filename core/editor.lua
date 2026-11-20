@@ -357,6 +357,20 @@ function E:on_down(ev, fx)
   self.just_activated = false
   if self.drag then return fx end
 
+  -- a left click in a read only (gray) pattern selects that pattern in
+  -- Renoise, which makes it the editable center of the view
+  if ev.button == "left" and not ev.mods.alt then
+    local seg = T.locate(self.doc.timeline, self:clamp_g(G.x_to_g(self.view, x)))
+    if seg and not seg.editable then
+      self.selection = {}
+      self.line_anchor = nil
+      fx.goto_seq = seg.seq
+      fx.status = string.format("Pattern %d (sequence %d) selected.", seg.pattern - 1, seg.seq - 1)
+      fx.redraw = true
+      return fx
+    end
+  end
+
   if ev.button == "right" then
     -- context menu (like the native Automation editor); a right click on a
     -- point of the active lane selects it first

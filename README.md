@@ -46,7 +46,7 @@ The window has a toolbar, a legend on the left and the curve canvas.
 
 - *Current pattern*: the selected pattern, or the playing one when *Follow* is on and Renoise is playing.
 - *Pattern range*: several sequence positions side by side (From, To, *Song* for the whole song), with pattern separators and numbers. A pattern used more than once in the range is hatched and labelled *alias*; editing it changes every occurrence, and the status line says so. Pattern track aliases are resolved to their source pattern.
-- *Pattern + neighbors*: the current pattern is editable in the center, with 1 to 4 read-only neighbor patterns on each side.
+- *Pattern + neighbors*: the current pattern is editable in the center, with 1 to 4 read-only neighbor patterns on each side. Click in a gray neighbor pattern to select it in Renoise: it becomes the editable center (while Renoise plays with *Follow* on, the view stays on the playing pattern).
 
 **Tools:**
 
@@ -141,6 +141,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 16. Drag the resize grip in the bottom right corner: the window follows the mouse in both directions, keeps the size after closing and reopening; release outside the window works too.
 17. Every entry of the right-click menu, and its shortcut; Ctrl + Z undoes each in one step.
 18. Magnet: drag a point to the end of a pattern, it sticks to the border and to the next pattern's value. Link patterns on: the curve is continuous across borders and stays so after edits.
+19. Pattern + neighbors: a click in a gray pattern selects it in Renoise and makes it the editable center.
 
 ## Development
 

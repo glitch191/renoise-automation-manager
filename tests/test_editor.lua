@@ -294,7 +294,7 @@ T.test("interpolation change writes playmode for editable patterns", function()
   T.eq(ed:set_playmode(3), nil, "no change, no commit")
 end)
 
-T.test("neighbor patterns are read only", function()
+T.test("neighbor patterns are read only: a click selects them instead of editing", function()
   local doc = X.doc({
     { seq = 1, pattern = 1, lines = 16 },
     { seq = 2, pattern = 2, lines = 16 },
@@ -303,7 +303,8 @@ T.test("neighbor patterns are read only", function()
   local p = doc.lanes[1].data[1].points[2]
   local x, y = pos(ed, 1, p.t, p.v)
   local fx = ed:mouse(ev("down", x, y))
-  T.eq(fx.status, E.MSG_READ_ONLY)
+  T.eq(fx.goto_seq, 1)
+  T.eq(fx.commit, nil)
   T.eq(ed.drag, nil)
   local fx2 = ed:mouse(ev("double", pos(ed, 1, 3000, 0.5)))
   T.eq(fx2.commit, nil)
@@ -750,4 +751,19 @@ T.test("double-click on a point deletes it, on empty space adds one", function()
   local x2, y2 = pos(ed, 1, 1280, 0.7)
   fx = ed:mouse(ev("double", x2, y2))
   T.eq(fx.commit.description, "Multi Automation: Add point")
+end)
+
+T.test("a click in a gray neighbor pattern asks to select it", function()
+  local doc = X.doc({
+    { seq = 1, pattern = 1, lines = 16 },
+    { seq = 2, pattern = 4, lines = 16 },
+  }, { lanes = 1, points = 0, editable = function(seq) return seq == 1 end })
+  doc.lanes[1].data[1] = { points = pts({ 256, 0.2 }), exists = true, rev = 1, lines = 16, playmode = 2 }
+  local ed = setup(doc)
+  local fx = ed:mouse(ev("down", G.g_to_x(ed.view, 20 * 256), 100))
+  T.eq(fx.goto_seq, 2)
+  T.eq(fx.status, "Pattern 3 (sequence 1) selected.")
+  T.eq(fx.commit, nil)
+  fx = ed:mouse(ev("down", G.g_to_x(ed.view, 4 * 256), 100))
+  T.eq(fx.goto_seq, nil, "editable pattern: normal click")
 end)
