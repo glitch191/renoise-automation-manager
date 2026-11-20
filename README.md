@@ -57,8 +57,6 @@ The window has a toolbar, a legend on the left and the curve canvas.
 | Line (L) | Straight ramp between press and release (or two clicks); replaces the range, can cross patterns in Pattern range mode. |
 | Range (R) | Drag: select a time range over every visible curve. Del, Ctrl + C, Ctrl + X, Ctrl + V, Left, Right or the right-click menu then delete, copy, cut, paste or shift that passage in all those curves at once, in one undo step. Hidden curves are left alone. |
 
-**Vectorize** (V, or the right-click menu of a selection) turns stepped automation (for example recorded plugin moves in Points mode) into a few clean ramps. It first shows a preview: the simplified curve is drawn dashed over the active curve and the status line gives the point count. The wheel (or Up and Down) changes the tolerance, from 0 to 25 % of the parameter range; Enter, V or a left click applies (the curve switches to Lines, one undo step); Esc or a right click cancels. With selected points, only those can be removed.
-
 **Mouse and keys:**
 
 | Input | Action |
@@ -66,17 +64,16 @@ The window has a toolbar, a legend on the left and the curve canvas.
 | Shift while dragging | Fine move (one tenth), without snap |
 | Ctrl while dragging | Constrain to one axis |
 | Right-click or Alt + click on a point | Delete it |
-| Right-click with a selection | Menu: copy, cut, delete, vectorize, shift, scale around center or from bottom |
+| Right-click with a selection | Menu: copy, cut, delete, shift, scale around center or from bottom |
 | Alt + wheel (Alt + Shift + wheel) | Scale selected values around center (from bottom) |
 | Left, Right | Shift the selection by one grid step (Shift: 1/256 line) |
-| V | Vectorize preview of the active curve, or of the selection |
 | Del | Delete the selection |
 | Ctrl + C, Ctrl + X, Ctrl + V | Copy, cut, paste at the mouse position (works on another curve or pattern; with the Range tool, on every visible curve) |
 | Tab, Shift + Tab | Next, previous curve |
 | Wheel | Scroll in time |
 | Ctrl + wheel | Zoom in time around the mouse |
 | Ctrl + plus, Ctrl + minus, Ctrl + 0 | Interface zoom up, down, back to 125 % |
-| Esc | Cancel the gesture, the Vectorize preview, the range or the selection; close the window |
+| Esc | Cancel the gesture, the range or the selection; close the window |
 
 Other toolbar controls: *Snap* and the grid (Line, 1/2, 1/4, 1/8, Free), the interpolation of the active curve (Points, Lines, Curves), *Add lane* (menu of automatable parameters without automation), *Lock track* (keep showing this track), *Follow* (follow playback), *Fit* (show the whole range), *Legend*, *Settings*.
 
@@ -88,7 +85,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 
 **Values.** The value axis and hovering or dragging a point show the parameter, the time (pattern, line, sub-line, 0-based like the Pattern Editor) and the value. Real values are shown for linear parameters of native devices; other parameters are shown as a percentage. Reading values never changes a parameter.
 
-**Settings** (button): interface zoom (100 to 200 %), window size (Compact, Wide, Ultrawide, or a custom width and height), default tool, snap, inactive curve opacity, Vectorize tolerance (0 to 25 % of the parameter range, also changed with the wheel in the preview), write while dragging, follow playback, diagnostics. The diagnostics line shows the number of curves and points drawn, average and worst render time of the canvas (Lua drawing time measured with `os.clock`) and the playhead update rate. It can also be toggled with the `Global > Tools > Toggle Multi Automation View Diagnostics` key binding.
+**Settings** (button): interface zoom (100 to 200 %), window size (Compact, Wide, Ultrawide, or a custom width and height), default tool, snap, inactive curve opacity, write while dragging, follow playback, diagnostics. The diagnostics line shows the number of curves and points drawn, average and worst render time of the canvas (Lua drawing time measured with `os.clock`) and the playhead update rate. It can also be toggled with the `Global > Tools > Toggle Multi Automation View Diagnostics` key binding.
 
 ## Known limitations
 
@@ -108,7 +105,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 2. On a track with 8 automations: 8 distinct curves; hide one in the legend, it disappears; save, close and reopen the song: hidden state and colors are restored.
 3. Click near an inactive curve: it becomes active, no point changes; Tab cycles curves; the native Automation editor follows.
 4. Double-click adds a point, drag moves it (with Shift and Ctrl), right-click deletes it, snap grid works.
-5. Pencil, Line (also across two patterns in Pattern range mode), rectangle selection, scale, shift, copy and paste to another curve and pattern, interpolation change, Vectorize on a stepped curve (whole curve and selection), Add lane.
+5. Pencil, Line (also across two patterns in Pattern range mode), rectangle selection, scale, shift, copy and paste to another curve and pattern, interpolation change, Add lane.
 6. Ctrl + Z in Renoise undoes each gesture in one step.
 7. Edit a point in the native editor: the tool updates in under half a second, and the reverse.
 8. Change track, lock the track, delete a device, an automation, a track; load another song: no error in the scripting console.
@@ -117,7 +114,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 11. Close and reopen the window on the same song: the whole range is shown. Open the window: Fit is lit. Zoom in with Ctrl + wheel: Fit turns normal and the zoom indicator shows the visible lines; click Fit: the whole range comes back and Fit stays lit.
 12. Drag a point: the native Automation editor follows during the drag; Ctrl + Z undoes the whole drag; Esc during a drag restores the curve.
 13. Move, insert and delete tracks: hidden curves and colors stay with their track.
-14. Ruler and value axis readable at every zoom; Vectorize preview: wheel changes the point count, Enter applies, Esc cancels.
+14. Ruler and value axis readable at every zoom.
 15. Pattern range mode: drag a point into the next pattern. Range tool: copy a passage of every curve, paste it in another pattern, shift it, delete it.
 
 ## Development

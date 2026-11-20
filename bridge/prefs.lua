@@ -20,7 +20,6 @@ function M.create()
     snap_enabled = true,
     snap_grid = 1,                 -- index in editor GRIDS (1 = line)
     inactive_opacity = 35,         -- percent
-    vectorize_tolerance = 2,       -- percent of the value range (Vectorize)
     live_writes = true,            -- write drags and pencil strokes while the mouse moves
     follow_playback = true,
     legend_visible = true,

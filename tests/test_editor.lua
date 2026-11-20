@@ -377,35 +377,7 @@ T.test("no lane: explicit empty state message", function()
   T.eq(fx.status, E.MSG_NO_LANE)
 end)
 
-T.test("vectorize switches a stepped lane to Lines and simplifies it", function()
-  local list = {}
-  for i = 0, 8 do list[#list + 1] = 256 + i * 256; list[#list + 1] = i / 8 end
-  local doc = one_lane_doc(pts(list))
-  doc.lanes[1].playmode = 1
-  doc.lanes[1].data[1].playmode = 1
-  local ed = setup(doc)
-  local c, removed = ed:vectorize(0.01)
-  T.eq(c.description, "Multi Automation: Vectorize")
-  T.eq(#c.writes, 1)
-  T.eq(c.writes[1].playmode, 2)
-  T.eq(c.writes[1].points, pts({ 256, 0, 256 + 8 * 256, 1 }))
-  T.eq(removed, 7)
-  T.eq(ed:active_playmode(), 2)
-  T.eq(E.vectorize_message(c, removed), "Vectorized: Lines, 7 points removed.")
-  -- nothing left to do the second time
-  T.eq(ed:vectorize(0.01), nil)
-end)
 
-T.test("vectorize with a selection only touches the selected points", function()
-  local doc = one_lane_doc(pts({ 256, 0, 512, 0.25, 768, 0.5, 1024, 0.75, 1280, 1, 1536, 0 }))
-  local ed = setup(doc)
-  ed.selection = { [1] = { [512] = true, [768] = true } }
-  local c, removed = ed:vectorize(0)
-  T.eq(removed, 2)
-  T.eq(c.writes[1].playmode, nil) -- already Lines
-  T.eq(c.writes[1].points, pts({ 256, 0, 1024, 0.75, 1280, 1, 1536, 0 }))
-  T.ok(not ed:has_selection())
-end)
 
 
 T.test("live writes: a drag is written while moving, throttled, as one batch", function()
@@ -469,47 +441,7 @@ T.test("live pencil stroke writes while drawing", function()
   T.ok(#fx.commit.writes[1].points >= 3)
 end)
 
-T.test("V shows a preview, the wheel changes the tolerance, Enter applies", function()
-  local list = {}
-  for i = 0, 8 do list[#list + 1] = 256 + i * 256; list[#list + 1] = (i % 2 == 0) and 0.5 or 0.53 end
-  local doc = one_lane_doc(pts(list))
-  doc.lanes[1].data[1].playmode = 1
-  local ed = setup(doc)
-  ed.vectorize_tolerance = 0.01
-  local fx = ed:key("v", {})
-  T.eq(fx.commit, nil, "preview does not write")
-  T.ok(fx.status:find("^Vectorize preview: 9 to 9 points, tolerance 1 %%"), fx.status)
-  T.eq(#ed:preview_points()[1], 9)
-  -- wheel up raises the tolerance: 2 % keeps the 3 % wiggle, 3 % removes it
-  fx = ed:mouse({ type = "wheel", x = 100, y = 100, direction = "up", mods = {} })
-  T.near(ed.vec_preview.tol, 0.02, 1e-9)
-  T.eq(fx.tolerance, 0.02)
-  T.ok(#ed:preview_points()[1] > 2, "3 % wiggle still visible at 2 %")
-  fx = ed:mouse({ type = "wheel", x = 100, y = 100, direction = "up", mods = {} })
-  T.eq(#ed:preview_points()[1], 2)
-  T.ok(fx.status:find("9 to 2 points"), fx.status)
-  fx = ed:key("return", {})
-  T.eq(fx.commit.description, "Multi Automation: Vectorize")
-  T.eq(fx.commit.writes[1].playmode, 2)
-  T.eq(#fx.commit.writes[1].points, 2)
-  T.eq(ed.vec_preview, nil)
-end)
 
-T.test("Esc or right click cancels the preview without writing", function()
-  local doc = one_lane_doc(pts({ 256, 0, 512, 0.5, 768, 1 }))
-  local ed = setup(doc)
-  ed:key("v", {})
-  local fx = ed:key("esc", {})
-  T.eq(fx.commit, nil)
-  T.eq(ed.vec_preview, nil)
-  ed:key("v", {})
-  fx = ed:mouse(ev("down", 100, 100, "right"))
-  T.eq(fx.commit, nil)
-  T.eq(ed.vec_preview, nil)
-  ed:key("v", {})
-  fx = ed:mouse(ev("down", 100, 100, "left"))
-  T.ok(fx.commit, "left click applies")
-end)
 
 T.test("points move across a pattern border in Pattern range mode", function()
   local doc = X.doc({

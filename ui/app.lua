@@ -147,7 +147,6 @@ function App:start_session()
     tool = E.TOOLS[p.tool.value] or "edit",
     snap = p.snap_enabled.value,
     grid = E.GRIDS[p.snap_grid.value] or 256,
-    vectorize_tolerance = p.vectorize_tolerance.value / 100,
     live_writes = p.live_writes.value,
   })
   self.app_observers:clear("theme")
@@ -548,7 +547,6 @@ function App:render(ctx)
       colors = self:resolve_colors(),
       cache = self.cache,
       overlay = self.overlay,
-      preview = self.editor:preview_points(),
       range = self.editor.range,
     }
     local stats = R.draw(ctx, scene)
@@ -869,7 +867,6 @@ function App:apply_fx(fx)
     if fx.hover then self:show_hover(fx.hover) else self:hide_hover() end
   end
   if fx.status then self:set_status(fx.status) end
-  if fx.tolerance then self.prefs.vectorize_tolerance.value = math.floor(fx.tolerance * 100 + 0.5) end
   if fx.tool then self:refresh_tool() end
   if fx.view then
     self:update_scrollbar()
@@ -981,19 +978,6 @@ function App:set_playmode(mode)
     self.session:commit(c)
     R.clear_cache(self.cache)
     self:request_redraw()
-  end
-end
-
-function App:vectorize()
-  if self.updating or not self.editor or not self.session or not self.session.doc then return end
-  if not self.editor:active_lane() then
-    self:set_status(E.MSG_NO_ACTIVE)
-    return
-  end
-  if self.editor.vec_preview then
-    self:apply_fx(self.editor:apply_preview())
-  else
-    self:apply_fx(self.editor:start_vectorize())
   end
 end
 
@@ -1154,7 +1138,6 @@ function App:selection_menu()
     { name = "Copy (Ctrl + C)", invoke = function() ed:copy() end },
     { name = "Cut (Ctrl + X)", invoke = run(function() return ed:cut() end) },
     { name = "Delete (Del)", invoke = run(function() return ed:delete_selection() end) },
-    { name = "--- Vectorize selection (V)", invoke = function() self:vectorize() end },
     { name = "--- Shift left by grid (Left)", invoke = run(function() return ed:shift_selection(-math.max(ed:grid_now(), 16)) end) },
     { name = "Shift right by grid (Right)", invoke = run(function() return ed:shift_selection(math.max(ed:grid_now(), 16)) end) },
   }
@@ -1295,16 +1278,6 @@ function App:show_settings()
       notifier = function(v)
         if self.editor then self:set_snap(v) else p.snap_enabled.value = v end
         if self.views then self.views.snap.value = v end
-      end,
-    }),
-    row("Vectorize tolerance", vb:valuebox {
-      min = 0, max = 25, value = p.vectorize_tolerance.value, width = 80,
-      tooltip = "Largest value error (percent of the parameter range) allowed when Vectorize removes a point. 0 removes only points exactly on a line.",
-      tostring = function(v) return string.format("%d %%", v) end,
-      tonumber = function(s) return tonumber(string.match(s, "%d+")) end,
-      notifier = function(v)
-        p.vectorize_tolerance.value = v
-        if self.editor then self.editor.vectorize_tolerance = v / 100 end
       end,
     }),
     row("Write while dragging", vb:checkbox {
