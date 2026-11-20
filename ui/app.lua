@@ -147,6 +147,7 @@ function App:start_session()
     snap = p.snap_enabled.value,
     grid = E.GRIDS[p.snap_grid.value] or 256,
     vectorize_tolerance = p.vectorize_tolerance.value / 100,
+    live_writes = p.live_writes.value,
   })
   self.app_observers:clear("theme")
   self.app_observers:add("theme", renoise.app().theme_observable, function()
@@ -1219,6 +1220,14 @@ function App:show_settings()
       notifier = function(v)
         p.vectorize_tolerance.value = v
         if self.editor then self.editor.vectorize_tolerance = v / 100 end
+      end,
+    }),
+    row("Write while dragging", vb:checkbox {
+      value = p.live_writes.value,
+      tooltip = "Write drags and pencil strokes to the song while the mouse moves (the native editor follows live, still one undo step). Off: write when the mouse button is released.",
+      notifier = function(v)
+        p.live_writes.value = v
+        if self.editor then self.editor.live_writes = v end
       end,
     }),
     row("Follow playback", vb:checkbox {

@@ -35,6 +35,7 @@ E.MSG_NO_LANE = "No automation on this track. Use Add lane to create one."
 E.MSG_NO_ACTIVE = "No active lane. Click a curve or a legend row first."
 E.MSG_READ_ONLY = "Neighbour patterns are read only. Edit the center pattern."
 E.MSG_LINE_END = "Line: click the end point."
+E.LIVE_INTERVAL = 0.05 -- seconds between two live writes during a gesture
 
 local DESC = "Multi Automation: "
 
@@ -57,6 +58,11 @@ function E.new(opts)
   self.line_anchor = nil
   self.just_activated = false
   self.vectorize_tolerance = opts.vectorize_tolerance or 0.02
+  -- live writes: drags and pencil strokes are written to the song while the
+  -- mouse moves (throttled), all in one batch undo step
+  self.live_writes = (opts.live_writes ~= false)
+  self.clock = opts.clock or os.clock
+  self.last_live = nil
   return self
 end
 
@@ -452,6 +458,23 @@ function E:on_down(ev, fx)
   return fx
 end
 
+-- Intermediate commit of a running gesture (batch undo), or nil when live
+-- writes are off or the last one is too recent.
+function E:live_commit(desc, lane, patterns)
+  if not self.live_writes or not lane then return nil end
+  local now = self.clock()
+  if self.last_live and now - self.last_live < E.LIVE_INTERVAL and now >= self.last_live then return nil end
+  self.last_live = now
+  local c = new_commit(desc, true)
+  for pattern in pairs(patterns) do
+    put_write(c, lane, pattern, lane.data[pattern].points)
+    lane.data[pattern].exists = true
+  end
+  if #c.writes == 0 then return nil end
+  self.drag.live = true
+  return c
+end
+
 function E:on_drag(ev, fx)
   local d = self.drag
   if not d then return fx end
@@ -487,6 +510,7 @@ function E:on_drag(ev, fx)
     end
     self.selection = new_sel
     d.dt, d.dv = dt, dv
+    fx.commit = self:live_commit("Move points", lane, d.snap)
     local av = P.clamp_v(a.v + dv)
     local seg = a.seg
     fx.hover = {
@@ -502,6 +526,7 @@ function E:on_drag(ev, fx)
   elseif d.kind == "pencil" then
     local g = self:clamp_g(G.x_to_g(view, ev.x))
     self:pencil_sample(g, G.y_to_v(view, ev.y))
+    fx.commit = self:live_commit("Draw", self:active_lane(), d.snap)
     fx.redraw = true
   elseif d.kind == "line" then
     local g = self:clamp_g(P.snap_t(G.x_to_g(view, ev.x), d.grid))
@@ -516,12 +541,13 @@ function E:on_up(ev, fx)
   local d = self.drag
   if not d then return fx end
   self.drag = nil
+  self.last_live = nil
   local lane = self:active_lane()
   if d.kind == "move" then
     self.hover_id = nil
     fx.hover = false
-    if lane and (d.dt ~= 0 or d.dv ~= 0) then
-      local c = new_commit("Move points")
+    if lane and (d.dt ~= 0 or d.dv ~= 0 or d.live) then
+      local c = new_commit("Move points", d.live)
       for pattern in pairs(d.snap) do put_write(c, lane, pattern, lane.data[pattern].points) end
       fx.commit = c
       fx.status = self:alias_message(c)
@@ -551,7 +577,7 @@ function E:on_up(ev, fx)
     end
   elseif d.kind == "pencil" then
     if lane and next(d.snap) then
-      local c = new_commit("Draw")
+      local c = new_commit("Draw", d.live)
       for pattern in pairs(d.snap) do put_write(c, lane, pattern, lane.data[pattern].points) end
       fx.commit = c
       fx.status = self:alias_message(c)
@@ -919,12 +945,19 @@ function E:next_lane(dir)
   return lanes[idx].key
 end
 
+-- Returns handled, commit. The commit restores the song when the cancelled
+-- gesture was already written live.
 function E:cancel()
   if self.drag then
     local d = self.drag
     local lane = self:active_lane()
+    local c
     if lane and d.snap then
-      for pattern, pts in pairs(d.snap) do set_points(lane, pattern, pts) end
+      if d.live then c = new_commit(d.kind == "pencil" and "Draw" or "Move points", true) end
+      for pattern, pts in pairs(d.snap) do
+        set_points(lane, pattern, pts)
+        if c then put_write(c, lane, pattern, pts) end
+      end
       if d.kind == "move" then
         local sel = {}
         for pattern, times in pairs(d.times) do sel[pattern] = set_of(times) end
@@ -932,7 +965,8 @@ function E:cancel()
       end
     end
     self.drag = nil
-    return true
+    self.last_live = nil
+    return true, c
   end
   if self.line_anchor then
     self.line_anchor = nil
@@ -978,7 +1012,9 @@ function E:key(name, mods)
     fx.commit = self:shift_selection((name == "left") and -step or step)
     return fx
   elseif name == "esc" then
-    if self:cancel() then
+    local handled, c = self:cancel()
+    if handled then
+      fx.commit = c
       fx.overlay = false
       fx.hover = false
       return fx
