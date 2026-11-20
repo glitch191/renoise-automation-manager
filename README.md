@@ -2,10 +2,9 @@
 
 A Renoise tool that shows every graphical automation envelope of a track overlaid in one floating window, each curve in its own color (similar to the automation view of other DAWs), and lets you edit them directly: points, pencil, line, rectangle selection, copy and paste. Changes are written to the song immediately and stay in sync with the native Automation editor.
 
-<!-- Screenshot to add: real capture of the tool open in Renoise with a fictitious example song.
-![The multi automation view with eight overlaid curves on one track](docs/screenshots/main-view.png)
-*Eight automation curves of one track overlaid; the active curve is drawn on top with its points.*
--->
+![The multi automation view in Renoise: three automation curves of one track overlaid, the active Width curve drawn on top with its points](docs/screenshots/main-view.webp)
+
+*Three automations of one track (Panning, Volume, Width) overlaid in Pattern + neighbours mode; the active curve is drawn on top with its points, the others are dimmed.*
 
 ## Requirements
 
