@@ -510,3 +510,46 @@ T.test("Esc or right click cancels the preview without writing", function()
   fx = ed:mouse(ev("down", 100, 100, "left"))
   T.ok(fx.commit, "left click applies")
 end)
+
+T.test("points move across a pattern border in Pattern range mode", function()
+  local doc = X.doc({
+    { seq = 1, pattern = 1, lines = 16 },
+    { seq = 2, pattern = 2, lines = 16 },
+  }, { lanes = 1, points = 0 })
+  local lane = doc.lanes[1]
+  lane.playmode = 2
+  lane.data[1] = { points = pts({ 256, 0.2, 256 * 15, 0.6 }), exists = true, rev = 1, lines = 16, playmode = 2 }
+  lane.data[2] = { points = pts({ 256, 0.4 }), exists = true, rev = 1, lines = 16, playmode = 2 }
+  local ed = setup(doc)
+  ed.live_writes = false
+  -- grab the point at line 14 of pattern 1 and drag it 4 lines right: line 2 of pattern 2
+  local x, y = pos(ed, 1, 256 * 15, 0.6)
+  ed:mouse(ev("down", x, y))
+  local x2 = G.g_to_x(ed.view, 16 * 256 + 2 * 256)
+  ed:mouse(ev("drag", x2, y))
+  local fx = ed:mouse(ev("up", x2, y))
+  local by = {}
+  for _, w in ipairs(fx.commit.writes) do by[w.pattern] = w.points end
+  T.eq(by[1], pts({ 256, 0.2 }), "removed from pattern 1")
+  T.eq(by[2], pts({ 256, 0.4, 256 * 3, 0.6 }), "added to pattern 2 at line 2")
+  T.ok(ed.selection[2] and ed.selection[2][256 * 3], "selection follows the point")
+end)
+
+T.test("neighbour patterns stay read only when moving", function()
+  local doc = X.doc({
+    { seq = 1, pattern = 1, lines = 16 },
+    { seq = 2, pattern = 2, lines = 16 },
+  }, { lanes = 1, points = 0, editable = function(seq) return seq == 1 end })
+  local lane = doc.lanes[1]
+  lane.data[1] = { points = pts({ 256 * 15, 0.6 }), exists = true, rev = 1, lines = 16, playmode = 2 }
+  local ed = setup(doc)
+  ed.live_writes = false
+  local x, y = pos(ed, 1, 256 * 15, 0.6)
+  ed:mouse(ev("down", x, y))
+  local x2 = G.g_to_x(ed.view, 20 * 256)
+  ed:mouse(ev("drag", x2, y))
+  local fx = ed:mouse(ev("up", x2, y))
+  T.eq(#fx.commit.writes, 1)
+  T.eq(fx.commit.writes[1].pattern, 1)
+  T.eq(fx.commit.writes[1].points[1].t, 16 * 256, "clamped to the last line of the editable pattern")
+end)

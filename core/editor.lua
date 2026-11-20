@@ -404,15 +404,28 @@ function E:on_down(ev, fx)
         self.selection[p.pattern] = self.selection[p.pattern] or {}
         self.selection[p.pattern][p.t] = true
       end
-      local snap, times = {}, {}
+      -- moved points in global time, so they can cross pattern borders
+      local snap, times, items = {}, {}, {}
       for pattern, set in pairs(self.selection) do
-        if p.lane.data[pattern] then
-          snap[pattern] = P.copy(p.lane.data[pattern].points)
+        local data = p.lane.data[pattern]
+        local seg = (pattern == p.pattern) and p.seg or self:first_segment_of(pattern, true)
+        if data and seg then
+          snap[pattern] = P.copy(data.points)
           times[pattern] = list_of(set)
+          for i = 1, #data.points do
+            local q = data.points[i]
+            if set[q.t] then
+              items[#items + 1] = { pattern = pattern, t = q.t, g = T.global(seg, q.t), v = q.v, s = q.s or 0,
+                anchor = (pattern == p.pattern and q.t == p.t) }
+            end
+          end
         end
       end
-      self.drag = { kind = "move", x0 = x, y0 = y, snap = snap, times = times,
-        anchor = { pattern = p.pattern, t = p.t, v = p.v, lines = p.seg.lines, seg = p.seg },
+      local r0, r1 = self:editable_run(p.seg)
+      self.drag = { kind = "move", x0 = x, y0 = y, snap = snap, times = times, items = items,
+        run = { r0, r1 },
+        anchor = { pattern = p.pattern, t = p.t, v = p.v, lines = p.seg.lines, seg = p.seg,
+          g = T.global(p.seg, p.t) },
         dt = 0, dv = 0 }
       fx.redraw = true
       return fx
@@ -469,6 +482,73 @@ function E:on_down(ev, fx)
   return fx
 end
 
+-- First and last global time of the run of contiguous editable segments
+-- that contains seg.
+function E:editable_run(seg)
+  local segs = self:segments()
+  local idx
+  for i = 1, #segs do
+    if segs[i] == seg then idx = i end
+  end
+  if not idx then return seg.offset, seg.offset + seg.len_g - 1 end
+  local a, b = idx, idx
+  while a > 1 and segs[a - 1].editable do a = a - 1 end
+  while b < #segs and segs[b + 1].editable do b = b + 1 end
+  return segs[a].offset, segs[b].offset + segs[b].len_g - 1
+end
+
+-- Move the drag items by (dt, dv) from their snapshots. Points may land in
+-- another pattern of the editable run. Returns the new selection.
+function E:apply_move(lane, d, dt, dv)
+  dt = math.floor(dt + 0.5)
+  local tl = self.doc.timeline
+  local base, moved = {}, {}
+  -- remove the moved points from their source patterns
+  for pattern, pts in pairs(d.snap) do
+    local set = set_of(d.times[pattern] or {})
+    local keep = {}
+    for i = 1, #pts do
+      if not set[pts[i].t] then keep[#keep + 1] = { t = pts[i].t, v = pts[i].v, s = pts[i].s or 0 } end
+    end
+    base[pattern] = keep
+  end
+  -- place them at their new global time
+  for i = 1, #d.items do
+    local it = d.items[i]
+    local seg, t = T.locate(tl, it.g + dt)
+    if seg and seg.editable then
+      local data = ensure_data(lane, seg)
+      if not d.snap[seg.pattern] then d.snap[seg.pattern] = P.copy(data.points) end
+      if not base[seg.pattern] then base[seg.pattern] = P.copy(d.snap[seg.pattern]) end
+      t = P.clamp_t(t, seg.lines)
+      it.dest = { pattern = seg.pattern, t = t }
+      local list = moved[seg.pattern] or {}
+      list[#list + 1] = { t = t, v = P.clamp_v(it.v + dv), s = it.s }
+      moved[seg.pattern] = list
+    else
+      it.dest = nil
+    end
+  end
+  local sel = {}
+  for pattern, keep in pairs(base) do
+    local list = moved[pattern] or {}
+    local taken = {}
+    for i = 1, #list do taken[list[i].t] = true end
+    local out = {}
+    for i = 1, #keep do
+      if not taken[keep[i].t] then out[#out + 1] = keep[i] end
+    end
+    local set = {}
+    for i = 1, #list do
+      out[#out + 1] = list[i]
+      set[list[i].t] = true
+    end
+    set_points(lane, pattern, P.sort(out))
+    if next(set) then sel[pattern] = set end
+  end
+  return sel
+end
+
 -- Intermediate commit of a running gesture (batch undo), or nil when live
 -- writes are off or the last one is too recent.
 function E:live_commit(desc, lane, patterns)
@@ -499,34 +579,52 @@ function E:on_drag(ev, fx)
     local hpx = view.height - 2 * view.pad
     local dv = (hpx > 0) and (-dy / hpx) or 0
     local a = d.anchor
-    local target = a.t
-    if dx ~= 0 then
-      target = P.snap_clamp_t(a.t + dx * view.span_g / view.width, self:grid_now(ev.mods), a.lines)
-    end
-    local dt = target - a.t
     local lane = self:active_lane()
     if not lane then return fx end
-    local new_sel = {}
-    local anchor_t = a.t
-    for pattern, pts in pairs(d.snap) do
-      local times = d.times[pattern]
-      local np, nt = P.move(pts, times, dt, dv, lane.data[pattern].lines)
-      set_points(lane, pattern, np)
-      new_sel[pattern] = set_of(nt)
-      if pattern == a.pattern then
-        for i = 1, #times do
-          if times[i] == a.t then anchor_t = nt[i] end
+    local dt = 0
+    local grid = self:grid_now(ev.mods)
+    if dx ~= 0 then
+      local target = P.snap_t(a.g + dx * view.span_g / view.width, grid)
+      dt = target - a.g
+    end
+    -- keep every moved point inside the editable run around the anchor,
+    -- on the grid when possible
+    local gmin, gmax
+    for i = 1, #d.items do
+      local g = d.items[i].g
+      gmin = gmin and math.min(gmin, g) or g
+      gmax = gmax and math.max(gmax, g) or g
+    end
+    if gmin then
+      if gmin + dt < d.run[1] then
+        dt = d.run[1] - gmin
+        if grid > 1 then
+          local snapped = math.ceil((a.g + dt) / grid) * grid - a.g
+          if gmax + snapped <= d.run[2] then dt = snapped end
         end
       end
+      if gmax + dt > d.run[2] then
+        dt = d.run[2] - gmax
+        if grid > 1 then
+          local snapped = math.floor((a.g + dt) / grid) * grid - a.g
+          if gmin + snapped >= d.run[1] then dt = snapped end
+        end
+      end
+    end
+    local anchor_pattern, anchor_t = a.pattern, a.t
+    local new_sel = self:apply_move(lane, d, dt, dv)
+    for i = 1, #d.items do
+      local it = d.items[i]
+      if it.anchor and it.dest then anchor_pattern, anchor_t = it.dest.pattern, it.dest.t end
     end
     self.selection = new_sel
     d.dt, d.dv = dt, dv
     fx.commit = self:live_commit("Move points", lane, d.snap)
     local av = P.clamp_v(a.v + dv)
-    local seg = a.seg
+    local ag = a.g + dt
     fx.hover = {
-      x = G.g_to_x(view, seg.offset - P.UNITS + anchor_t), y = G.v_to_y(view, av),
-      text = self:label_for(lane, a.pattern, anchor_t, av), color = lane.color,
+      x = G.g_to_x(view, ag), y = G.v_to_y(view, av),
+      text = self:label_for(lane, anchor_pattern, anchor_t, av), color = lane.color,
     }
     self.hover_id = "drag"
     fx.redraw = true
