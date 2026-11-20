@@ -171,3 +171,45 @@ T.test("is_valid detects problems", function()
   T.ok(not P.is_valid(pts({ 256, 0, 256, 1 }), 16), "duplicate")
   T.ok(not P.is_valid(pts({ 100, 0 }), 16), "before line 1")
 end)
+
+T.test("simplify removes collinear points and keeps the ends", function()
+  local p = pts({ 256, 0, 512, 0.25, 768, 0.5, 1024, 0.75, 1280, 1 })
+  local out, removed = P.simplify(p, 0)
+  T.eq(out, pts({ 256, 0, 1280, 1 }))
+  T.eq(removed, 3)
+end)
+
+T.test("simplify keeps points farther than the tolerance", function()
+  local p = pts({ 256, 0, 512, 0.5, 768, 0.03, 1024, 0 })
+  local out = P.simplify(p, 0.05)
+  T.eq(out, pts({ 256, 0, 512, 0.5, 768, 0.03, 1024, 0 }))
+  local loose = P.simplify(p, 0.6)
+  T.eq(loose, pts({ 256, 0, 1024, 0 }))
+end)
+
+T.test("simplify of a stepped ramp keeps the shape within tolerance", function()
+  local list = {}
+  for i = 0, 15 do list[#list + 1] = 256 + i * 256; list[#list + 1] = i / 15 end
+  list[#list + 1] = 256 + 16 * 256; list[#list + 1] = 0
+  local out, removed = P.simplify(pts(list), 0.02)
+  T.eq(#out, 3)
+  T.eq(removed, 14)
+end)
+
+T.test("simplify only removes eligible points and resets their scaling", function()
+  local p = pts({ 256, 0, 512, 0.25, 768, 0.5, 1024, 0.9, 1280, 1 })
+  p[2].s = 0.5
+  p[4].s = 0.5
+  local out, removed = P.simplify(p, 0.1, { [768] = true, [1024] = true })
+  T.eq(removed, 1)
+  T.eq(#out, 4)
+  T.eq(out[2].s, 0.5) -- not eligible: untouched
+  T.eq(out[3].t, 1024)
+  T.eq(out[3].s, 0) -- eligible and kept: straight line
+end)
+
+T.test("simplify handles tiny lists", function()
+  T.eq(P.simplify({}, 0), {})
+  T.eq(P.simplify(pts({ 256, 0.5 }), 0), pts({ 256, 0.5 }))
+  T.eq(P.simplify(pts({ 256, 0.5, 512, 0.1 }), 1), pts({ 256, 0.5, 512, 0.1 }))
+end)

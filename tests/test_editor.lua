@@ -376,3 +376,43 @@ T.test("no lane: explicit empty state message", function()
   local fx = ed:mouse(ev("down", 10, 10))
   T.eq(fx.status, E.MSG_NO_LANE)
 end)
+
+T.test("vectorize switches a stepped lane to Lines and simplifies it", function()
+  local list = {}
+  for i = 0, 8 do list[#list + 1] = 256 + i * 256; list[#list + 1] = i / 8 end
+  local doc = one_lane_doc(pts(list))
+  doc.lanes[1].playmode = 1
+  doc.lanes[1].data[1].playmode = 1
+  local ed = setup(doc)
+  local c, removed = ed:vectorize(0.01)
+  T.eq(c.description, "Multi Automation: Vectorize")
+  T.eq(#c.writes, 1)
+  T.eq(c.writes[1].playmode, 2)
+  T.eq(c.writes[1].points, pts({ 256, 0, 256 + 8 * 256, 1 }))
+  T.eq(removed, 7)
+  T.eq(ed:active_playmode(), 2)
+  T.eq(E.vectorize_message(c, removed), "Vectorized: Lines, 7 points removed.")
+  -- nothing left to do the second time
+  T.eq(ed:vectorize(0.01), nil)
+end)
+
+T.test("vectorize with a selection only touches the selected points", function()
+  local doc = one_lane_doc(pts({ 256, 0, 512, 0.25, 768, 0.5, 1024, 0.75, 1280, 1, 1536, 0 }))
+  local ed = setup(doc)
+  ed.selection = { [1] = { [512] = true, [768] = true } }
+  local c, removed = ed:vectorize(0)
+  T.eq(removed, 2)
+  T.eq(c.writes[1].playmode, nil) -- already Lines
+  T.eq(c.writes[1].points, pts({ 256, 0, 1024, 0.75, 1280, 1, 1536, 0 }))
+  T.ok(not ed:has_selection())
+end)
+
+T.test("V key vectorizes the active lane with a status", function()
+  local doc = one_lane_doc(pts({ 256, 0, 512, 0.5, 768, 1 }))
+  doc.lanes[1].data[1].playmode = 1
+  local ed = setup(doc)
+  local fx = ed:key("v", {})
+  T.ok(fx.commit)
+  T.eq(fx.status, "Vectorized: Lines, 1 point removed.")
+  T.eq(ed.tool, "edit")
+end)

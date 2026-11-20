@@ -56,6 +56,7 @@ function E.new(opts)
   self.cursor_g = nil
   self.line_anchor = nil
   self.just_activated = false
+  self.vectorize_tolerance = opts.vectorize_tolerance or 0.02
   return self
 end
 
@@ -821,6 +822,87 @@ function E:set_playmode(mode)
   return c
 end
 
+-- Vectorize: switch the active lane to Lines and remove the points that a
+-- straight line already follows within `tol` (0 to 1). Works on the
+-- selection when there is one, otherwise on every editable pattern.
+-- Returns commit (or nil), removed, kept.
+function E:vectorize(tol)
+  local lane = self:active_lane()
+  if not lane then return nil, 0, 0 end
+  tol = tol or self.vectorize_tolerance or 0.02
+  local targets, order = {}, {}
+  if self:has_selection() then
+    for pattern, set in pairs(self.selection) do
+      if next(set) and lane.data[pattern] and lane.data[pattern].exists then
+        targets[pattern] = set
+        order[#order + 1] = pattern
+      end
+    end
+    table.sort(order)
+  else
+    local segs = self:segments()
+    for i = 1, #segs do
+      local s = segs[i]
+      local d = lane.data[s.pattern]
+      if s.editable and d and d.exists and targets[s.pattern] == nil then
+        targets[s.pattern] = false
+        order[#order + 1] = s.pattern
+      end
+    end
+  end
+  local c = new_commit("Vectorize")
+  local removed, kept = 0, 0
+  local new_sel = {}
+  for _, pattern in ipairs(order) do
+    local data = lane.data[pattern]
+    local eligible = targets[pattern] or nil
+    local np, r = P.simplify(data.points, tol, eligible)
+    removed = removed + r
+    local changed = r > 0
+    for i = 1, #np do
+      if np[i].s ~= (data.points[i] and data.points[i].s or 0) then changed = true end
+    end
+    if eligible then
+      local set = {}
+      for i = 1, #np do
+        if eligible[np[i].t] then
+          set[np[i].t] = true
+          kept = kept + 1
+        end
+      end
+      new_sel[pattern] = set
+    else
+      kept = kept + #np
+    end
+    if changed then
+      set_points(lane, pattern, np)
+      put_write(c, lane, pattern, np)
+    end
+    if data.playmode ~= I.PLAYMODE_LINES then
+      data.playmode = I.PLAYMODE_LINES
+      data.rev = (data.rev or 0) + 1
+      local w
+      for i = 1, #c.writes do
+        if c.writes[i].pattern == pattern then w = c.writes[i] end
+      end
+      if not w then
+        w = { key = lane.key, pattern = pattern }
+        c.writes[#c.writes + 1] = w
+      end
+      w.playmode = I.PLAYMODE_LINES
+    end
+  end
+  if #order > 0 then lane.playmode = I.PLAYMODE_LINES end
+  if self:has_selection() then self.selection = new_sel end
+  if #c.writes == 0 then return nil, removed, kept end
+  return c, removed, kept
+end
+
+function E.vectorize_message(commit, removed)
+  if not commit then return "Vectorize: nothing to change." end
+  return string.format("Vectorized: Lines, %d point%s removed.", removed, removed == 1 and "" or "s")
+end
+
 function E:next_lane(dir)
   local lanes = self:visible_lanes()
   if #lanes == 0 then return nil end
@@ -902,6 +984,11 @@ function E:key(name, mods)
       return fx
     end
     return nil
+  elseif name == "v" and not mods.shift then
+    local c, removed = self:vectorize()
+    fx.commit = c
+    fx.status = E.vectorize_message(c, removed)
+    return fx
   elseif not mods.shift and E.TOOL_KEYS[name] then
     self.tool = E.TOOL_KEYS[name]
     self.line_anchor = nil

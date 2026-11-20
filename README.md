@@ -56,6 +56,7 @@ The window has a toolbar, a legend on the left and the curve canvas.
 | Pencil (P) | Freehand drawing; points are created at the snap grid and replace the drawn range. |
 | Line (L) | Straight ramp between press and release (or two clicks); replaces the range, can cross patterns in Pattern range mode. |
 | Select (S) | Like Edit, focused on selections. |
+| Vectorize (V) | Not a tool but a command: switches the active curve (or the selected points) to Lines and removes the points that a straight line already follows within the tolerance set in Settings (2 % by default). Turns stepped automation (for example recorded plugin moves in Points mode) into a few clean ramps, in one undo step. |
 
 **Mouse and keys:**
 
@@ -64,9 +65,10 @@ The window has a toolbar, a legend on the left and the curve canvas.
 | Shift while dragging | Fine move (one tenth), without snap |
 | Ctrl while dragging | Constrain to one axis |
 | Right-click or Alt + click on a point | Delete it |
-| Right-click with a selection | Menu: copy, cut, delete, shift, scale around center or from bottom |
+| Right-click with a selection | Menu: copy, cut, delete, vectorize, shift, scale around center or from bottom |
 | Alt + wheel (Alt + Shift + wheel) | Scale selected values around center (from bottom) |
 | Left, Right | Shift the selection by one grid step (Shift: 1/256 line) |
+| V | Vectorize the active curve, or the selection |
 | Del | Delete the selection |
 | Ctrl + C, Ctrl + X, Ctrl + V | Copy, cut, paste at the mouse position (works on another curve or pattern) |
 | Tab, Shift + Tab | Next, previous curve |
@@ -75,13 +77,15 @@ The window has a toolbar, a legend on the left and the curve canvas.
 | Ctrl + plus, Ctrl + minus, Ctrl + 0 | Interface zoom up, down, back to 125 % |
 | Esc | Cancel the gesture or the selection; close the window |
 
-Other toolbar controls: *Snap* and the grid (Line, 1/2, 1/4, 1/8, Free), the interpolation of the active curve (Points, Lines, Curves), *Add lane* (menu of automatable parameters without automation), *Lock track* (keep showing this track), *Follow* (follow playback), *Fit* (show the whole range), *Legend*, *Settings*.
+Other toolbar controls: *Snap* and the grid (Line, 1/2, 1/4, 1/8, Free), the interpolation of the active curve (Points, Lines, Curves), *Vectorize*, *Add lane* (menu of automatable parameters without automation), *Lock track* (keep showing this track), *Follow* (follow playback), *Fit* (show the whole range), *Legend*, *Settings*.
+
+**Zoom indicator.** The bottom left of the window always says how much of the time range is shown: `View: all 64 lines` when everything is visible, or for example `Zoom x16: Pat 2, lines 12 to 15 of 64` when zoomed in with Ctrl + wheel. While zoomed in, the *Fit* button is highlighted and the pattern number is written on the canvas, even in Current pattern mode.
 
 Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Renoise, named for example `Multi Automation: Move points`.
 
 **Values.** Hovering or dragging a point shows the parameter, the time (pattern, line, sub-line, 0-based like the Pattern Editor) and the value. Real values are shown for linear parameters of native devices; other parameters are shown as a percentage. Reading values never changes a parameter.
 
-**Settings** (button): interface zoom (100 to 200 %), window size (Compact, Wide, Ultrawide, or a custom width and height), default tool, snap, inactive curve opacity, follow playback, diagnostics. The diagnostics line shows the number of curves and points drawn, average and worst render time of the canvas (Lua drawing time measured with `os.clock`) and the playhead update rate. It can also be toggled with the `Global > Tools > Toggle Multi Automation View Diagnostics` key binding.
+**Settings** (button): interface zoom (100 to 200 %), window size (Compact, Wide, Ultrawide, or a custom width and height), default tool, snap, inactive curve opacity, Vectorize tolerance (0 to 25 % of the parameter range), follow playback, diagnostics. The diagnostics line shows the number of curves and points drawn, average and worst render time of the canvas (Lua drawing time measured with `os.clock`) and the playhead update rate. It can also be toggled with the `Global > Tools > Toggle Multi Automation View Diagnostics` key binding.
 
 ## Known limitations
 
@@ -101,12 +105,13 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 2. On a track with 8 automations: 8 distinct curves; hide one in the legend, it disappears; save, close and reopen the song: hidden state and colors are restored.
 3. Click near an inactive curve: it becomes active, no point changes; Tab cycles curves; the native Automation editor follows.
 4. Double-click adds a point, drag moves it (with Shift and Ctrl), right-click deletes it, snap grid works.
-5. Pencil, Line (also across two patterns in Pattern range mode), rectangle selection, scale, shift, copy and paste to another curve and pattern, interpolation change, Add lane.
+5. Pencil, Line (also across two patterns in Pattern range mode), rectangle selection, scale, shift, copy and paste to another curve and pattern, interpolation change, Vectorize on a stepped curve (whole curve and selection), Add lane.
 6. Ctrl + Z in Renoise undoes each gesture in one step.
 7. Edit a point in the native editor: the tool updates in under half a second, and the reverse.
 8. Change track, lock the track, delete a device, an automation, a track; load another song: no error in the scripting console.
 9. Play the song: the playhead moves, Follow scrolls the view; Pattern range and neighbours modes match the native editor.
 10. Ctrl + plus, Ctrl + minus, Ctrl + 0, the size presets on a 1920 x 1080 and a 3440 x 1440 screen.
+11. Zoom in with Ctrl + wheel: the zoom indicator and the highlighted Fit button show it; Fit brings back the whole range.
 
 ## Development
 

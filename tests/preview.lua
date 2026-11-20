@@ -31,7 +31,7 @@ end
 
 local TOOLBAR_LABELS = {
   mode = "Current pattern", range = "From  To  Song", tool = "Edit|Pencil|Line|Select",
-  snap = "[x] Snap  Line", interp = "Points|Lines|Curves", add_lane = "Add lane",
+  snap = "[x] Snap  Line", interp = "Points|Lines|Curves", vectorize = "Vectorize", add_lane = "Add lane",
   lock = "Lock track", follow = "[x] Follow", fit = "Fit", legend = "Legend", settings = "Settings",
 }
 

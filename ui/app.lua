@@ -146,6 +146,7 @@ function App:start_session()
     tool = E.TOOLS[p.tool.value] or "edit",
     snap = p.snap_enabled.value,
     grid = E.GRIDS[p.snap_grid.value] or 256,
+    vectorize_tolerance = p.vectorize_tolerance.value / 100,
   })
   self.app_observers:clear("theme")
   self.app_observers:add("theme", renoise.app().theme_observable, function()
@@ -203,6 +204,7 @@ function App:build()
   local p = self.prefs
   local views = { vb = vb }
   self.views = views
+  self.zoomed_state = nil
 
   local ch = d.control_h
 
@@ -256,6 +258,11 @@ function App:build()
     tooltip = "Interpolation (Playmode) of the active lane in the editable patterns",
     notifier = function(v) self:set_playmode(v) end,
   }
+  views.vectorize = vb:button {
+    text = "Vectorize", width = L.W.vectorize, height = ch,
+    tooltip = "Vectorize (V): switch the active lane (or the selection) to Lines and remove the points a straight line already follows (tolerance in Settings)",
+    notifier = function() self:vectorize() end,
+  }
   views.add_lane = vb:button {
     text = "Add lane", width = L.W.add_lane, height = ch,
     tooltip = "Create a new automation for an automatable parameter of this track",
@@ -273,7 +280,7 @@ function App:build()
   }
   views.fit = vb:button {
     text = "Fit", width = L.W.fit, height = ch,
-    tooltip = "Fit: show the whole time range",
+    tooltip = "Fit: show the whole time range (highlighted while the view is zoomed in)",
     notifier = function() self:fit() end,
   }
   views.legend_toggle = vb:button {
@@ -292,7 +299,7 @@ function App:build()
     views = {
       views.mode, views.mode_extra, views.tool,
       vb:row { views = { views.snap, vb:text { text = "Snap", width = 30, height = ch }, views.grid } },
-      views.interp, views.add_lane, views.lock,
+      views.interp, views.vectorize, views.add_lane, views.lock,
       vb:row { views = { views.follow, vb:text { text = "Follow", width = L.W.follow, height = ch } } },
       views.fit, views.legend_toggle, views.settings,
     },
@@ -389,9 +396,11 @@ function App:build()
   main_row:add_view(canvas_col)
 
   -- status ----------------------------------------------------------------
-  views.status = vb:text { text = "", width = math.floor(d.total_w * 0.55), height = d.status_h }
-  views.diag = vb:text { text = "", font = "mono", align = "right", width = math.floor(d.total_w * 0.45) - 2 * d.margin, height = d.status_h, visible = p.diagnostics.value }
-  local status_row = vb:row { views = { views.status, views.diag } }
+  views.zoom = vb:text { text = "", style = "disabled", width = math.floor(d.total_w * 0.3), height = d.status_h,
+    tooltip = "How much of the time range the canvas shows. Ctrl + wheel zooms around the mouse, Fit shows everything." }
+  views.status = vb:text { text = "", width = math.floor(d.total_w * 0.35), height = d.status_h }
+  views.diag = vb:text { text = "", font = "mono", align = "right", width = math.floor(d.total_w * 0.35) - 2 * d.margin, height = d.status_h, visible = p.diagnostics.value }
+  local status_row = vb:row { views = { views.zoom, views.status, views.diag } }
 
   local content = vb:column {
     margin = d.margin, spacing = d.spacing,
@@ -579,7 +588,11 @@ function App:update_labels()
   local pool = self.views and self.views.seg_labels
   if not pool then return end
   local segs = self.editor:segments()
-  local labels = R.segment_labels(self.view, segs, false)
+  local zinfo = R.zoom_info(self.view, segs, self.editor:total_g())
+  self:update_zoom_indicator(zinfo)
+  -- when zoomed in, always name the pattern under the view, even in
+  -- Current pattern mode
+  local labels = R.segment_labels(self.view, segs, zinfo.zoomed)
   for i = 1, #pool do
     local lab = labels[i]
     local t = pool[i]
@@ -590,6 +603,24 @@ function App:update_labels()
     else
       t.visible = false
     end
+  end
+end
+
+-- Zoom indicator: text under the canvas and a highlighted Fit button while
+-- the view does not show the whole time range.
+function App:update_zoom_indicator(info)
+  local v = self.views
+  if not v or not v.zoom then return end
+  v.zoom.text = info.text
+  v.zoom.style = info.zoomed and "strong" or "disabled"
+  if info.zoomed ~= self.zoomed_state then
+    self.zoomed_state = info.zoomed
+    local c = { 0, 0, 0 } -- default button color
+    if info.zoomed then
+      local ok, col = pcall(theme_color, THEME.selection)
+      c = (ok and col) and { col[1], col[2], col[3] } or { 220, 120, 40 }
+    end
+    pcall(function() v.fit.color = c end)
   end
 end
 
@@ -880,6 +911,16 @@ function App:set_playmode(mode)
   end
 end
 
+function App:vectorize()
+  if self.updating or not self.editor or not self.session or not self.session.doc then return end
+  if not self.editor:active_lane() then
+    self:set_status(E.MSG_NO_ACTIVE)
+    return
+  end
+  local c, removed = self.editor:vectorize()
+  self:apply_fx({ commit = c, redraw = true, status = E.vectorize_message(c, removed) })
+end
+
 function App:set_mode(v)
   if self.updating then return end
   self.prefs.time_mode.value = v
@@ -1014,6 +1055,7 @@ function App:selection_menu()
     { name = "Copy (Ctrl + C)", invoke = function() ed:copy() end },
     { name = "Cut (Ctrl + X)", invoke = run(function() return ed:cut() end) },
     { name = "Delete (Del)", invoke = run(function() return ed:delete_selection() end) },
+    { name = "--- Vectorize selection (V)", invoke = function() self:vectorize() end },
     { name = "--- Shift left by grid (Left)", invoke = run(function() return ed:shift_selection(-math.max(ed:grid_now(), 16)) end) },
     { name = "Shift right by grid (Right)", invoke = run(function() return ed:shift_selection(math.max(ed:grid_now(), 16)) end) },
   }
@@ -1154,6 +1196,16 @@ function App:show_settings()
       notifier = function(v)
         if self.editor then self:set_snap(v) else p.snap_enabled.value = v end
         if self.views then self.views.snap.value = v end
+      end,
+    }),
+    row("Vectorize tolerance", vb:valuebox {
+      min = 0, max = 25, value = p.vectorize_tolerance.value, width = 80,
+      tooltip = "Largest value error (percent of the parameter range) allowed when Vectorize removes a point. 0 removes only points exactly on a line.",
+      tostring = function(v) return string.format("%d %%", v) end,
+      tonumber = function(s) return tonumber(string.match(s, "%d+")) end,
+      notifier = function(v)
+        p.vectorize_tolerance.value = v
+        if self.editor then self.editor.vectorize_tolerance = v / 100 end
       end,
     }),
     row("Follow playback", vb:checkbox {

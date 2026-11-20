@@ -161,6 +161,45 @@ function R.segment_labels(view, segments, show_single)
   return out
 end
 
+-- Describes how much of the timeline the view shows, for the zoom indicator.
+-- Returns { zoomed, factor, text }. Lines are 0-based like the Pattern Editor.
+function R.zoom_info(view, segments, total_g)
+  total_g = math.max(total_g or 256, 1)
+  local factor = total_g / math.max(view.span_g, 1)
+  local zoomed = view.span_g < total_g - 0.5
+  local lines_total = math.floor(total_g / P.UNITS + 0.5)
+  if not zoomed or #segments == 0 then
+    local text = string.format("View: all %d lines", lines_total)
+    if #segments > 1 then text = string.format("View: all %d patterns, %d lines", #segments, lines_total) end
+    return { zoomed = false, factor = 1, text = text }
+  end
+  local function at(g)
+    for i = 1, #segments do
+      local s = segments[i]
+      if g < s.offset + s.len_g or i == #segments then
+        local line = math.floor(math.max(0, g - s.offset) / P.UNITS)
+        return s, math.min(line, s.lines - 1)
+      end
+    end
+  end
+  local g0 = math.max(0, view.start_g)
+  local g1 = math.max(g0, math.min(total_g, view.start_g + view.span_g) - 1)
+  local s0, l0 = at(g0)
+  local s1, l1 = at(g1)
+  local zoom = factor >= 10 and string.format("x%d", math.floor(factor + 0.5)) or string.format("x%.1f", factor)
+  local text
+  if s0 == s1 then
+    if l0 == l1 then
+      text = string.format("Zoom %s: Pat %d, inside line %d of %d", zoom, s0.pattern - 1, l0, s0.lines)
+    else
+      text = string.format("Zoom %s: Pat %d, lines %d to %d of %d", zoom, s0.pattern - 1, l0, l1, s0.lines)
+    end
+  else
+    text = string.format("Zoom %s: Pat %d line %d to Pat %d line %d", zoom, s0.pattern - 1, l0, s1.pattern - 1, l1)
+  end
+  return { zoomed = true, factor = factor, text = text .. " (Fit shows all)" }
+end
+
 --------------------------------------------------------------------------------
 -- main draw
 

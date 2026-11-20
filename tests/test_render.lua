@@ -136,3 +136,31 @@ T.test("30 lanes x 300 points x 16 patterns stay within a vertex budget", functi
   T.ok(stats.vertices <= 30 * (view.width + 16) * 3, "vertices " .. stats.vertices)
   io.write(string.format("           render 30 x 300 x 16: %.1f ms (SVG mock, %d vertices)\n", dt * 1000, stats.vertices))
 end)
+
+T.test("zoom_info tells whether the view shows everything", function()
+  local G = require "core.geometry"
+  local segs = { { seq = 1, pattern = 3, offset = 0, len_g = 64 * 256, lines = 64 } }
+  local view = G.new_view(1000, 300, 6, 64 * 256)
+  local z = R.zoom_info(view, segs, 64 * 256)
+  T.eq(z.zoomed, false)
+  T.eq(z.text, "View: all 64 lines")
+  view.start_g, view.span_g = 12 * 256, 4 * 256
+  z = R.zoom_info(view, segs, 64 * 256)
+  T.eq(z.zoomed, true)
+  T.eq(z.text, "Zoom x16: Pat 2, lines 12 to 15 of 64 (Fit shows all)")
+  view.start_g, view.span_g = 0, 64
+  z = R.zoom_info(view, segs, 64 * 256)
+  T.eq(z.text, "Zoom x256: Pat 2, inside line 0 of 64 (Fit shows all)")
+end)
+
+T.test("zoom_info across two patterns", function()
+  local G = require "core.geometry"
+  local segs = {
+    { seq = 1, pattern = 1, offset = 0, len_g = 32 * 256, lines = 32 },
+    { seq = 2, pattern = 2, offset = 32 * 256, len_g = 32 * 256, lines = 32 },
+  }
+  local view = G.new_view(1000, 300, 6, 64 * 256)
+  T.eq(R.zoom_info(view, segs, 64 * 256).text, "View: all 2 patterns, 64 lines")
+  view.start_g, view.span_g = 30 * 256, 4 * 256
+  T.eq(R.zoom_info(view, segs, 64 * 256).text, "Zoom x16: Pat 0 line 30 to Pat 1 line 1 (Fit shows all)")
+end)
