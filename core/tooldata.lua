@@ -10,9 +10,14 @@
 --   version = 1,
 --   tracks = { [track_index] = { hidden = { [lane_key] = true },
 --                                colors = { [lane_key] = palette_index },
---                                active = lane_key or nil } },
---   lock = { enabled = boolean, track = track_index },
+--                                active = lane_key or nil,
+--                                name = track name, devices = device paths } },
+--   lock = { enabled = boolean, track = track_index, name = track name },
 -- }
+--
+-- Renoise tracks have no stable id, so each entry also remembers the name
+-- and device list of its track; D.remap moves entries to the track that now
+-- has them when tracks are inserted, moved or deleted.
 
 local D = {}
 
@@ -203,6 +208,8 @@ local function sanitize_track(t)
     end
   end
   if type(t.active) == "string" then out.active = t.active end
+  if type(t.name) == "string" then out.name = t.name end
+  if type(t.devices) == "string" then out.devices = t.devices end
   return out
 end
 
@@ -222,6 +229,7 @@ function D.normalize(raw)
     data.lock.enabled = raw.lock.enabled == true
     local tr = tonumber(raw.lock.track)
     data.lock.track = (tr and tr >= 0) and math.floor(tr) or 0
+    if type(raw.lock.name) == "string" then data.lock.name = raw.lock.name end
   end
   return data
 end
@@ -249,6 +257,86 @@ function D.encode(data)
     if next(t.hidden) or next(t.colors) or t.active then out.tracks[idx] = t end
   end
   return D.PREFIX .. D.VERSION .. ":" .. serialize(out, 0)
+end
+
+-- Move track entries to the tracks they belong to. prints[idx] = { name,
+-- devices } describes the current tracks. Matching order: same index with
+-- the same name and devices, then a unique track with the same name and
+-- devices, the same name, the same devices (renamed track). Unmatched
+-- entries stay on their index when no other entry claimed it (old data
+-- without names, or a track renamed and changed at once), otherwise they
+-- are dropped (deleted track). Returns true when something changed.
+function D.remap(data, prints)
+  local entries = {}
+  for idx, t in pairs(data.tracks) do entries[#entries + 1] = { idx = idx, t = t } end
+  table.sort(entries, function(a, b) return a.idx < b.idx end)
+  local out, claimed, placed = {}, {}, {}
+  local changed = false
+  local function place(e, idx)
+    out[idx] = e.t
+    claimed[idx] = true
+    placed[e] = true
+    if idx ~= e.idx then changed = true end
+  end
+  local function try(match)
+    for _, e in ipairs(entries) do
+      if not placed[e] and e.t.name then
+        local p = prints[e.idx]
+        if p and not claimed[e.idx] and match(e.t, p) then
+          place(e, e.idx)
+        else
+          local found, count = nil, 0
+          for idx, q in pairs(prints) do
+            if not claimed[idx] and match(e.t, q) then
+              found, count = idx, count + 1
+            end
+          end
+          if count == 1 then place(e, found) end
+        end
+      end
+    end
+  end
+  try(function(t, p) return t.name == p.name and t.devices == p.devices end)
+  try(function(t, p) return t.name == p.name end)
+  try(function(t, p) return t.devices ~= nil and t.devices ~= "" and t.devices == p.devices end)
+  for _, e in ipairs(entries) do
+    if not placed[e] then
+      if prints[e.idx] and not claimed[e.idx] then
+        place(e, e.idx)
+      else
+        changed = true -- dropped
+      end
+    end
+  end
+  for idx, t in pairs(out) do
+    local p = prints[idx]
+    if p and (t.name ~= p.name or t.devices ~= p.devices) then
+      t.name, t.devices = p.name, p.devices
+      changed = true
+    end
+  end
+  data.tracks = out
+  -- lock
+  local lock = data.lock
+  if lock.enabled then
+    local p = prints[lock.track]
+    if lock.name and not (p and p.name == lock.name) then
+      local found, count = nil, 0
+      for idx, q in pairs(prints) do
+        if q.name == lock.name then found, count = idx, count + 1 end
+      end
+      if count == 1 then
+        lock.track = found
+        changed = true
+      end
+    end
+    local q = prints[lock.track]
+    if q and lock.name ~= q.name then
+      lock.name = q.name
+      changed = true
+    end
+  end
+  return changed
 end
 
 function D.track(data, idx)

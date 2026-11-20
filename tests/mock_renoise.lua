@@ -298,6 +298,14 @@ function M.song(spec)
     if self.selected_track_index > #self.tracks then self.selected_track_index = #self.tracks end
     self.tracks_observable:fire()
   end
+  -- Move a track like Renoise does (its pattern tracks move with it).
+  function song:swap_tracks(a, b)
+    self.tracks[a], self.tracks[b] = self.tracks[b], self.tracks[a]
+    for _, pattern in ipairs(self.patterns) do
+      pattern.tracks[a], pattern.tracks[b] = pattern.tracks[b], pattern.tracks[a]
+    end
+    self.tracks_observable:fire()
+  end
   function song:delete_device(ti, di)
     local track = self.tracks[ti]
     local dev = table.remove(track.devices, di)

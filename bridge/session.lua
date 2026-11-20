@@ -60,15 +60,53 @@ function S:track_index()
   return song.selected_track_index
 end
 
+-- Name and device list of every track, used to follow the per-track
+-- settings when tracks are inserted, moved or deleted.
+function S:track_prints()
+  local prints = {}
+  local tracks = self.song.tracks
+  for i = 1, #tracks do
+    local tr = tracks[i]
+    local paths = {}
+    local devs = tr.devices or {}
+    for k = 1, #devs do paths[k] = devs[k].device_path end
+    prints[i] = { name = tr.name or "", devices = table.concat(paths, ",") }
+  end
+  return prints
+end
+
+function S:remap_tracks()
+  local ok, changed = pcall(D.remap, self.td, self:track_prints())
+  if not ok then
+    self.log("[tool_data] " .. tostring(changed))
+  elseif changed then
+    self.td_changed = true
+  end
+end
+
 function S:set_lock(enabled)
   self.td.lock.enabled = enabled and true or false
   self.td.lock.track = enabled and self.song.selected_track_index or 0
+  local tr = enabled and self.song.tracks[self.td.lock.track]
+  self.td.lock.name = tr and tr.name or nil
   self.td_changed = true
   self.dirty.structure = true
 end
 
 function S:track_data()
-  return D.track(self.td, self:track_index())
+  local idx = self:track_index()
+  local t = D.track(self.td, idx)
+  if not t.name then
+    -- remember which track the entry belongs to (see D.remap)
+    local tr = self.song.tracks[idx]
+    if tr then
+      local paths = {}
+      local devs = tr.devices or {}
+      for k = 1, #devs do paths[k] = devs[k].device_path end
+      t.name, t.devices = tr.name or "", table.concat(paths, ",")
+    end
+  end
+  return t
 end
 
 -- Sequence position shown as the current pattern.
@@ -187,6 +225,7 @@ function S:rebuild(reason)
   self.dirty.structure = false
   self.dirty.points = false
   local song = self.song
+  self:remap_tracks()
   local ti = self:track_index()
   local from, to, editable = self:range()
   self.current_seq = self:center_seq()

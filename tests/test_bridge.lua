@@ -346,3 +346,18 @@ T.test("editor commit through the session lands in the song", function()
   T.eq(a2.points[1].time, 1)
   T.eq(#song._undo, 1)
 end)
+
+T.test("hidden lanes and colors follow a moved track", function()
+  local song = make_song()
+  local s = session(song)
+  local key = s.doc.lanes[1].key
+  s:set_hidden(key, true)
+  local color = s:track_data().colors[key]
+  song:swap_tracks(1, 2)
+  song:select_track(2)
+  s:idle()
+  T.eq(s.doc.track_index, 2)
+  T.eq(s.doc.lanes[1].hidden, true, "hidden state followed the track")
+  T.eq(s:track_data().colors[key], color)
+  T.eq(s.td.tracks[1], nil, "nothing left on the track now at index 1")
+end)

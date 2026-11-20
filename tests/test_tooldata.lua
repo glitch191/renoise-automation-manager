@@ -65,3 +65,45 @@ T.test("empty track entries are dropped on encode", function()
   local back = D.decode(D.encode(d))
   T.eq(back.tracks[4], nil)
 end)
+
+T.test("remap follows moved, inserted and deleted tracks", function()
+  local data = D.default()
+  data.tracks[1] = { hidden = { a = true }, colors = {}, name = "Bass", devices = "F" }
+  data.tracks[2] = { hidden = {}, colors = { b = 3 }, name = "Lead", devices = "" }
+  -- moved: Lead is now first
+  T.eq(D.remap(data, { { name = "Lead", devices = "" }, { name = "Bass", devices = "F" } }), true)
+  T.eq(data.tracks[1].colors.b, 3)
+  T.eq(data.tracks[2].hidden.a, true)
+  -- inserted a new track in front
+  D.remap(data, { { name = "New", devices = "" }, { name = "Lead", devices = "" }, { name = "Bass", devices = "F" } })
+  T.eq(data.tracks[1], nil)
+  T.eq(data.tracks[2].name, "Lead")
+  T.eq(data.tracks[3].name, "Bass")
+  -- Lead deleted: its settings do not go to another track
+  D.remap(data, { { name = "New", devices = "" }, { name = "Bass", devices = "F" } })
+  T.eq(data.tracks[2].hidden.a, true)
+  T.eq(data.tracks[1], nil)
+  -- renamed track keeps its settings (same devices)
+  D.remap(data, { { name = "New", devices = "" }, { name = "Bass 2", devices = "F" } })
+  T.eq(data.tracks[2].hidden.a, true)
+  T.eq(data.tracks[2].name, "Bass 2")
+  -- unchanged song: nothing to do
+  T.eq(D.remap(data, { { name = "New", devices = "" }, { name = "Bass 2", devices = "F" } }), false)
+end)
+
+T.test("remap keeps old data without names and survives encode", function()
+  local data = D.default()
+  data.tracks[2] = { hidden = { a = true }, colors = {} }
+  D.remap(data, { { name = "A", devices = "" }, { name = "B", devices = "" } })
+  T.eq(data.tracks[2].name, "B")
+  local back = D.decode(D.encode(data))
+  T.eq(back.tracks[2].name, "B")
+  T.eq(back.tracks[2].hidden.a, true)
+end)
+
+T.test("remap moves the lock with its track", function()
+  local data = D.default()
+  data.lock = { enabled = true, track = 1, name = "Bass" }
+  D.remap(data, { { name = "Lead", devices = "" }, { name = "Bass", devices = "" } })
+  T.eq(data.lock.track, 2)
+end)
