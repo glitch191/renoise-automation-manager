@@ -351,15 +351,23 @@ T.test("right-click menu like the native editor", function()
     local names = {}
     for _, e in ipairs(menu) do names[e.name] = e end
     for _, n in ipairs({ "Cut (Ctrl + X)", "Paste Continuously (Ctrl + P)", "Insert Paste (Ctrl + I)",
-      "--- Cut Selected Time (Ctrl + K)", "Delete Envelope", "--- Process:Flip Selection (Ctrl + F)",
-      "Process:Create Sine Curve", "--- Lock Zoom", "Zoom Out Fully", "Zoom To Current",
+      "---Cut Selected Time (Ctrl + K)", "Delete Envelope", "---Process:Flip Selection (Ctrl + F)",
+      "---Process:Create Sine Curve", "---Lock Zoom", "Zoom Out Fully", "Zoom To Current",
       "Draw Tool (P)", "Line Tool (L)" }) do
       T.ok(names[n], "entry " .. n)
     end
-    names["Process:Create Linear Curve"].invoke()
+    -- separators: dashes directly followed by the text (no space), and one
+    -- single path for the whole Process submenu
+    for _, e in ipairs(menu) do
+      T.ok(not e.name:find("^%-+ "), "no space after the separator dashes: " .. e.name)
+      if e.name:find("Process:", 1, true) then
+        T.eq(e.name:match("^(.-)Process:"), "---", "same Process path: " .. e.name)
+      end
+    end
+    names["---Process:Create Linear Curve"].invoke()
     T.eq(song._undo[#song._undo].desc, "Multi Automation: Create linear curve")
     names["Zoom To Current"].invoke()
-    names["--- Lock Zoom"].invoke()
+    names["---Lock Zoom"].invoke()
     T.eq(env.tool.preferences.lock_zoom.value, true)
     names["Line Tool (L)"].invoke()
     names["Delete Envelope"].invoke()

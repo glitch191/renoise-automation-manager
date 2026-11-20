@@ -1240,34 +1240,34 @@ function App:context_menu()
     { name = "Paste (Ctrl + V)", active = has_clip and lane ~= nil, invoke = run(function() return ed:paste() end) },
     { name = "Paste Continuously (Ctrl + P)", active = has_clip and lane ~= nil, invoke = run(function() return ed:paste_continuously() end) },
     { name = "Insert Paste (Ctrl + I)", active = has_clip and lane ~= nil, invoke = run(function() return ed:insert_paste() end) },
-    { name = "--- Cut Selected Time (Ctrl + K)", active = span, invoke = run(function() return ed:cut_time() end) },
+    { name = "---Cut Selected Time (Ctrl + K)", active = span, invoke = run(function() return ed:cut_time() end) },
     { name = "Delete Envelope", active = lane ~= nil, invoke = run(function() return ed:delete_envelope() end) },
-    { name = "--- Process:Flip Selection (Ctrl + F)", active = lane ~= nil, invoke = process("flip") },
-    { name = "Process:Mirror Selection (Ctrl + Shift + F)", active = lane ~= nil, invoke = process("mirror") },
-    { name = "Process:Humanize Selection (Ctrl + R)", active = lane ~= nil, invoke = process("humanize") },
-    { name = "Process:--- Create Random Points", active = lane ~= nil, invoke = process("random") },
-    { name = "Process:Create Exponential Curve", active = lane ~= nil, invoke = process("exponential") },
-    { name = "Process:Create Linear Curve", active = lane ~= nil, invoke = process("linear") },
-    { name = "Process:Create Sine Curve", active = lane ~= nil, invoke = process("sine") },
+    { name = "---Process:Flip Selection (Ctrl + F)", active = lane ~= nil, invoke = process("flip") },
+    { name = "---Process:Mirror Selection (Ctrl + Shift + F)", active = lane ~= nil, invoke = process("mirror") },
+    { name = "---Process:Humanize Selection (Ctrl + R)", active = lane ~= nil, invoke = process("humanize") },
+    { name = "---Process:---Create Random Points", active = lane ~= nil, invoke = process("random") },
+    { name = "---Process:Create Exponential Curve", active = lane ~= nil, invoke = process("exponential") },
+    { name = "---Process:Create Linear Curve", active = lane ~= nil, invoke = process("linear") },
+    { name = "---Process:Create Sine Curve", active = lane ~= nil, invoke = process("sine") },
   }
   for _, f in ipairs({ 50, 75, 125, 150 }) do
-    entries[#entries + 1] = { name = string.format("Process:--- Scale Selection Around Center:%d %%", f), active = has_sel,
+    entries[#entries + 1] = { name = string.format("---Process:---Scale Selection Around Center:%d %%", f), active = has_sel,
       invoke = run(function() return ed:scale_selection(f / 100, "center") end) }
   end
   for _, f in ipairs({ 50, 75, 125, 150 }) do
-    entries[#entries + 1] = { name = string.format("Process:Scale Selection From Bottom:%d %%", f), active = has_sel,
+    entries[#entries + 1] = { name = string.format("---Process:Scale Selection From Bottom:%d %%", f), active = has_sel,
       invoke = run(function() return ed:scale_selection(f / 100, "bottom") end) }
   end
   local more = {
-    { name = "--- Lock Zoom", selected = self.prefs.lock_zoom.value,
+    { name = "---Lock Zoom", selected = self.prefs.lock_zoom.value,
       invoke = function() self.prefs.lock_zoom.value = not self.prefs.lock_zoom.value end },
     { name = "Zoom Out Fully", invoke = function() self:fit() end },
     { name = "Zoom To Current", invoke = function() self:zoom_to_current() end },
-    { name = "--- Edit Tool (E)", selected = tool == "edit", invoke = function() self:select_tool("edit") end },
+    { name = "---Edit Tool (E)", selected = tool == "edit", invoke = function() self:select_tool("edit") end },
     { name = "Draw Tool (P)", selected = tool == "pencil", invoke = function() self:select_tool("pencil") end },
     { name = "Line Tool (L)", selected = tool == "line", invoke = function() self:select_tool("line") end },
     { name = "Range Tool (R)", selected = tool == "range", invoke = function() self:select_tool("range") end },
-    { name = "--- Points", selected = mode == 1, active = lane ~= nil, invoke = function() self:set_playmode(1); self:refresh_interp() end },
+    { name = "---Points", selected = mode == 1, active = lane ~= nil, invoke = function() self:set_playmode(1); self:refresh_interp() end },
     { name = "Lines", selected = mode == 2, active = lane ~= nil, invoke = function() self:set_playmode(2); self:refresh_interp() end },
     { name = "Curves", selected = mode == 3, active = lane ~= nil, invoke = function() self:set_playmode(3); self:refresh_interp() end },
   }
