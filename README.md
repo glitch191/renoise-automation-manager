@@ -40,7 +40,7 @@ The window has a toolbar, a legend on the left and the curve canvas.
 
 **Legend.** One row per automated parameter, shown as `Device: Parameter`. The checkbox hides or shows the curve; a click on the color swatch or name makes the curve active. Hidden curves, colors and the track lock are stored in the song.
 
-**Active curve.** Only one curve is editable at a time. It is drawn on top, thicker and opaque, with its points. Other curves are dimmed (opacity set in Settings, 35 % by default). Click near a curve (Edit or Select tool) to make it active without changing any point. Selecting a parameter in the native Automation editor activates its curve, and the other way round.
+**Active curve.** Only one curve is editable at a time. It is drawn on top, thicker and opaque, with its points. Other curves are dimmed (opacity set in Settings, 35 % by default). Click near a curve (Edit tool) to make it active without changing any point. Selecting a parameter in the native Automation editor activates its curve, and the other way round.
 
 **Time modes** (first toolbar menu):
 
@@ -52,11 +52,12 @@ The window has a toolbar, a legend on the left and the curve canvas.
 
 | Tool | Action |
 | --- | --- |
-| Edit (E) | Double-click: add a point. Drag a point: move it. Drag on empty space: rectangle selection. |
+| Edit (E) | Double-click: add a point. Drag a point: move it (in Pattern range mode, also into the next or previous pattern). Drag on empty space: rectangle selection. |
 | Pencil (P) | Freehand drawing; points are created at the snap grid and replace the drawn range. |
 | Line (L) | Straight ramp between press and release (or two clicks); replaces the range, can cross patterns in Pattern range mode. |
-| Select (S) | Like Edit, focused on selections. |
-| Vectorize (V) | Not a tool but a command: switches the active curve (or the selected points) to Lines and removes the points that a straight line already follows within the tolerance set in Settings (2 % by default). Turns stepped automation (for example recorded plugin moves in Points mode) into a few clean ramps, in one undo step. |
+| Range (R) | Drag: select a time range over every visible curve. Del, Ctrl + C, Ctrl + X, Ctrl + V, Left, Right or the right-click menu then delete, copy, cut, paste or shift that passage in all those curves at once, in one undo step. Hidden curves are left alone. |
+
+**Vectorize** (button or V) turns stepped automation (for example recorded plugin moves in Points mode) into a few clean ramps. It first shows a preview: the simplified curve is drawn dashed over the active curve and the status line gives the point count. The wheel (or Up and Down) changes the tolerance, from 0 to 25 % of the parameter range; Enter, V or a left click applies (the curve switches to Lines, one undo step); Esc or a right click cancels. With selected points, only those can be removed.
 
 **Mouse and keys:**
 
@@ -68,24 +69,26 @@ The window has a toolbar, a legend on the left and the curve canvas.
 | Right-click with a selection | Menu: copy, cut, delete, vectorize, shift, scale around center or from bottom |
 | Alt + wheel (Alt + Shift + wheel) | Scale selected values around center (from bottom) |
 | Left, Right | Shift the selection by one grid step (Shift: 1/256 line) |
-| V | Vectorize the active curve, or the selection |
+| V | Vectorize preview of the active curve, or of the selection |
 | Del | Delete the selection |
-| Ctrl + C, Ctrl + X, Ctrl + V | Copy, cut, paste at the mouse position (works on another curve or pattern) |
+| Ctrl + C, Ctrl + X, Ctrl + V | Copy, cut, paste at the mouse position (works on another curve or pattern; with the Range tool, on every visible curve) |
 | Tab, Shift + Tab | Next, previous curve |
 | Wheel | Scroll in time |
 | Ctrl + wheel | Zoom in time around the mouse |
 | Ctrl + plus, Ctrl + minus, Ctrl + 0 | Interface zoom up, down, back to 125 % |
-| Esc | Cancel the gesture or the selection; close the window |
+| Esc | Cancel the gesture, the Vectorize preview, the range or the selection; close the window |
 
 Other toolbar controls: *Snap* and the grid (Line, 1/2, 1/4, 1/8, Free), the interpolation of the active curve (Points, Lines, Curves), *Vectorize*, *Add lane* (menu of automatable parameters without automation), *Lock track* (keep showing this track), *Follow* (follow playback), *Fit* (show the whole range), *Legend*, *Settings*.
 
 **Zoom indicator.** The bottom left of the window always says how much of the time range is shown: `View: all 64 lines` when everything is visible, or for example `Zoom x16: Pat 2, lines 12 to 15 of 64` when zoomed in with Ctrl + wheel. The *Fit* button stays lit (theme selection color) as long as the whole range is shown, and turns back to a normal button as soon as you zoom in. While zoomed in, the pattern number is written on the canvas, even in Current pattern mode.
 
-Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Renoise, named for example `Multi Automation: Move points`.
+Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Renoise, named for example `Multi Automation: Move points`. Drags and pencil strokes are written to the song while the mouse moves (about 20 times per second, as one batch undo step), so the native Automation editor follows live; *Write while dragging* in Settings turns this off.
 
-**Values.** Hovering or dragging a point shows the parameter, the time (pattern, line, sub-line, 0-based like the Pattern Editor) and the value. Real values are shown for linear parameters of native devices; other parameters are shown as a percentage. Reading values never changes a parameter.
+**Ruler and value axis.** Line numbers (0-based) run along the bottom of the canvas, with a step that follows the zoom, down to quarter lines (`+64`, `+128`, `+192`, in 1/256 line). The left side shows the values of the active curve at the five horizontal guides.
 
-**Settings** (button): interface zoom (100 to 200 %), window size (Compact, Wide, Ultrawide, or a custom width and height), default tool, snap, inactive curve opacity, Vectorize tolerance (0 to 25 % of the parameter range), follow playback, diagnostics. The diagnostics line shows the number of curves and points drawn, average and worst render time of the canvas (Lua drawing time measured with `os.clock`) and the playhead update rate. It can also be toggled with the `Global > Tools > Toggle Multi Automation View Diagnostics` key binding.
+**Values.** The value axis and hovering or dragging a point show the parameter, the time (pattern, line, sub-line, 0-based like the Pattern Editor) and the value. Real values are shown for linear parameters of native devices; other parameters are shown as a percentage. Reading values never changes a parameter.
+
+**Settings** (button): interface zoom (100 to 200 %), window size (Compact, Wide, Ultrawide, or a custom width and height), default tool, snap, inactive curve opacity, Vectorize tolerance (0 to 25 % of the parameter range, also changed with the wheel in the preview), write while dragging, follow playback, diagnostics. The diagnostics line shows the number of curves and points drawn, average and worst render time of the canvas (Lua drawing time measured with `os.clock`) and the playhead update rate. It can also be toggled with the `Global > Tools > Toggle Multi Automation View Diagnostics` key binding.
 
 ## Known limitations
 
@@ -94,10 +97,10 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 - The Curves interpolation and the point scaling in Lines mode are drawn with an approximation (monotone cubic curve, power curve); Renoise does not document its exact formulas.
 - Real values are approximate for some parameters (linear mapping only); plugin and non-linear parameters are shown as percentages.
 - Patterns used several times in the sequence share their automation: editing one occurrence changes all of them.
-- Hidden curves, colors and the active curve are stored per track index: moving a track moves its settings to another track.
-- Points can be moved in time within their own pattern only.
+- Hidden curves, colors and the active curve follow their track by name and device list. A track renamed and given other devices at the same time, while other tracks move, can lose its settings.
+- Points move across patterns only inside a run of editable patterns (Pattern range mode); neighbour patterns stay read only.
 - The playhead moves at the Renoise idle rate (about 10 times per second) and by whole lines.
-- During a drag, the new values are written to the song when the mouse button is released.
+- Live writes during a drag rely on the Renoise batch undo to group them; check in Renoise that Ctrl + Z undoes a whole drag. If not, turn off *Write while dragging*.
 
 ## Manual check list
 
@@ -111,7 +114,11 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 8. Change track, lock the track, delete a device, an automation, a track; load another song: no error in the scripting console.
 9. Play the song: the playhead moves, Follow scrolls the view; Pattern range and neighbours modes match the native editor.
 10. Ctrl + plus, Ctrl + minus, Ctrl + 0, the size presets on a 1920 x 1080 and a 3440 x 1440 screen.
-11. Open the window: Fit is lit. Zoom in with Ctrl + wheel: Fit turns normal and the zoom indicator shows the visible lines; click Fit: the whole range comes back and Fit stays lit.
+11. Close and reopen the window on the same song: the whole range is shown. Open the window: Fit is lit. Zoom in with Ctrl + wheel: Fit turns normal and the zoom indicator shows the visible lines; click Fit: the whole range comes back and Fit stays lit.
+12. Drag a point: the native Automation editor follows during the drag; Ctrl + Z undoes the whole drag; Esc during a drag restores the curve.
+13. Move, insert and delete tracks: hidden curves and colors stay with their track.
+14. Ruler and value axis readable at every zoom; Vectorize preview: wheel changes the point count, Enter applies, Esc cancels.
+15. Pattern range mode: drag a point into the next pattern. Range tool: copy a passage of every curve, paste it in another pattern, shift it, delete it.
 
 ## Development
 
