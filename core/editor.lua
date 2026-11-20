@@ -361,6 +361,10 @@ function E:on_down(ev, fx)
   -- Renoise, which makes it the editable center of the view
   if ev.button == "left" and not ev.mods.alt then
     local seg = T.locate(self.doc.timeline, self:clamp_g(G.x_to_g(self.view, x)))
+    -- an editable point under the mouse wins: points on a pattern border
+    -- are drawn across it and are often grabbed from the gray side
+    local p = seg and not seg.editable and self:hit_point(x, y)
+    if p and p.seg.editable then seg = nil end
     if seg and not seg.editable then
       self.selection = {}
       self.line_anchor = nil

@@ -767,3 +767,27 @@ T.test("a click in a gray neighbor pattern asks to select it", function()
   fx = ed:mouse(ev("down", G.g_to_x(ed.view, 4 * 256), 100))
   T.eq(fx.goto_seq, nil, "editable pattern: normal click")
 end)
+
+T.test("border point grabbed from the gray side moves and sticks to the previous pattern", function()
+  local doc = X.doc({ { seq = 1, pattern = 1, lines = 64 }, { seq = 2, pattern = 2, lines = 64 } },
+    { lanes = 1, points = 0, editable = function(seq) return seq == 2 end })
+  local lane = doc.lanes[1]
+  lane.playmode = 2
+  lane.data[1] = { points = pts({ 256, 1, 256 * 20, 0.7, 64 * 256 + 255, 0.55 }), exists = true, rev = 1, lines = 64, playmode = 2 }
+  lane.data[2] = { points = pts({ 256, 0.5, 256 * 48, 0.25 }), exists = true, rev = 1, lines = 64, playmode = 2 }
+  local ed = setup(doc)
+  ed.live_writes = false
+  local bx = G.g_to_x(ed.view, 64 * 256) - 1 -- one pixel inside the gray pattern
+  local y = G.v_to_y(ed.view, 0.5)
+  local fx = ed:mouse(ev("down", bx, y))
+  T.eq(fx.goto_seq, nil, "the point is grabbed, no pattern jump")
+  T.ok(ed.drag and ed.drag.kind == "move")
+  -- drag up to 3 px below the previous pattern's end value
+  local y2 = G.v_to_y(ed.view, 0.55) + 3
+  ed:mouse(ev("drag", bx, y2))
+  fx = ed:mouse(ev("up", bx, y2))
+  local p
+  for _, w in ipairs(fx.commit.writes) do if w.pattern == 2 then p = w.points end end
+  T.eq(p[1].t, 256)
+  T.eq(p[1].v, 0.55, "value of the previous pattern at the border")
+end)
