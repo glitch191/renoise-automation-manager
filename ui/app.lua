@@ -3,6 +3,7 @@
 -- song session (bridge.session).
 
 local L = require "core.layout"
+local TL = require "core.timeline"
 local G = require "core.geometry"
 local R = require "core.render"
 local E = require "core.editor"
@@ -573,9 +574,11 @@ function App:on_doc(doc, reason)
   self.editor.active_key = self.session.active_key
   if not self.views then return end
   local sig = signature(doc)
+  local had_signature = self.view_signature ~= nil
   if sig ~= self.view_signature then
     self.view_signature = sig
-    if self.view_state and reason == "build" then
+    if (self.view_state and reason == "build") or (self.prefs.lock_zoom.value and had_signature) then
+      -- Lock Zoom: keep the zoom when the pattern changes
       G.clamp(self.view, doc.timeline.total_g)
     else
       G.fit(self.view, doc.timeline.total_g)
@@ -973,8 +976,7 @@ function App:apply_fx(fx)
     self:update_scrollbar()
     self:after_view_change()
   end
-  if fx.menu == "selection" then self:selection_menu() end
-  if fx.menu == "range" then self:range_menu() end
+  if fx.menu == "context" then self:context_menu() end
   if fx.redraw then self:request_redraw() end
 end
 
@@ -1208,47 +1210,102 @@ function App:add_lane_menu()
   renoise.app():show_menu(self.dialog, entries, self.views.add_lane)
 end
 
-function App:range_menu()
+-- Right-click menu, modelled on the native Automation editor context menu.
+function App:context_menu()
   local ed = self.editor
+  local lane = ed:active_lane()
+  local has_sel = ed:has_selection()
+  local span = ed:op_span() ~= nil
+  local cb = ed.clipboard
+  local has_clip = (cb.last == "range" and cb.range ~= nil) or (cb.clip ~= nil and #cb.clip.items > 0)
   local function run(fn)
     return function()
-      local c = fn()
-      self:apply_fx({ commit = c, redraw = true, status = ed:range_message() })
+      local ok, err = pcall(function()
+        local c = fn()
+        self:apply_fx({ commit = c, redraw = true, status = c and ed:alias_message(c) or nil })
+      end)
+      if not ok then log("menu: " .. tostring(err)) end
     end
   end
-  local step = function() return math.max(ed:grid_now(), 16) end
+  local function process(kind)
+    return run(function() return ed:process(kind) end)
+  end
+  local tool = ed.tool
+  local mode = ed:active_playmode()
   local entries = {
-    { name = "Copy every visible lane (Ctrl + C)", invoke = function() ed:copy_range() end },
-    { name = "Cut every visible lane (Ctrl + X)", invoke = run(function() return ed:cut_range() end) },
-    { name = "Delete every visible lane (Del)", invoke = run(function() return ed:delete_range() end) },
-    { name = "--- Shift left by grid (Left)", invoke = run(function() return ed:shift_range(-step()) end) },
-    { name = "Shift right by grid (Right)", invoke = run(function() return ed:shift_range(step()) end) },
+    { name = "Cut (Ctrl + X)", active = has_sel or ed.range ~= nil,
+      invoke = run(function() if ed.range then return ed:cut_range() end return ed:cut() end) },
+    { name = "Copy (Ctrl + C)", active = has_sel or ed.range ~= nil,
+      invoke = function() if ed.range then ed:copy_range() else ed:copy() end end },
+    { name = "Paste (Ctrl + V)", active = has_clip and lane ~= nil, invoke = run(function() return ed:paste() end) },
+    { name = "Paste Continuously (Ctrl + P)", active = has_clip and lane ~= nil, invoke = run(function() return ed:paste_continuously() end) },
+    { name = "Insert Paste (Ctrl + I)", active = has_clip and lane ~= nil, invoke = run(function() return ed:insert_paste() end) },
+    { name = "--- Cut Selected Time (Ctrl + K)", active = span, invoke = run(function() return ed:cut_time() end) },
+    { name = "Delete Envelope", active = lane ~= nil, invoke = run(function() return ed:delete_envelope() end) },
+    { name = "--- Process:Flip Selection (Ctrl + F)", active = lane ~= nil, invoke = process("flip") },
+    { name = "Process:Mirror Selection (Ctrl + Shift + F)", active = lane ~= nil, invoke = process("mirror") },
+    { name = "Process:Humanize Selection (Ctrl + R)", active = lane ~= nil, invoke = process("humanize") },
+    { name = "Process:--- Create Random Points", active = lane ~= nil, invoke = process("random") },
+    { name = "Process:Create Exponential Curve", active = lane ~= nil, invoke = process("exponential") },
+    { name = "Process:Create Linear Curve", active = lane ~= nil, invoke = process("linear") },
+    { name = "Process:Create Sine Curve", active = lane ~= nil, invoke = process("sine") },
   }
+  for _, f in ipairs({ 50, 75, 125, 150 }) do
+    entries[#entries + 1] = { name = string.format("Process:--- Scale Selection Around Center:%d %%", f), active = has_sel,
+      invoke = run(function() return ed:scale_selection(f / 100, "center") end) }
+  end
+  for _, f in ipairs({ 50, 75, 125, 150 }) do
+    entries[#entries + 1] = { name = string.format("Process:Scale Selection From Bottom:%d %%", f), active = has_sel,
+      invoke = run(function() return ed:scale_selection(f / 100, "bottom") end) }
+  end
+  local more = {
+    { name = "--- Lock Zoom", selected = self.prefs.lock_zoom.value,
+      invoke = function() self.prefs.lock_zoom.value = not self.prefs.lock_zoom.value end },
+    { name = "Zoom Out Fully", invoke = function() self:fit() end },
+    { name = "Zoom To Current", invoke = function() self:zoom_to_current() end },
+    { name = "--- Edit Tool (E)", selected = tool == "edit", invoke = function() self:select_tool("edit") end },
+    { name = "Draw Tool (P)", selected = tool == "pencil", invoke = function() self:select_tool("pencil") end },
+    { name = "Line Tool (L)", selected = tool == "line", invoke = function() self:select_tool("line") end },
+    { name = "Range Tool (R)", selected = tool == "range", invoke = function() self:select_tool("range") end },
+    { name = "--- Points", selected = mode == 1, active = lane ~= nil, invoke = function() self:set_playmode(1); self:refresh_interp() end },
+    { name = "Lines", selected = mode == 2, active = lane ~= nil, invoke = function() self:set_playmode(2); self:refresh_interp() end },
+    { name = "Curves", selected = mode == 3, active = lane ~= nil, invoke = function() self:set_playmode(3); self:refresh_interp() end },
+  }
+  for _, e in ipairs(more) do entries[#entries + 1] = e end
   renoise.app():show_menu(self.dialog, entries)
 end
 
-function App:selection_menu()
-  local ed = self.editor
-  local function run(fn)
-    return function()
-      local c = fn()
-      self:apply_fx({ commit = c, redraw = true })
+function App:select_tool(name)
+  for i, t in ipairs(E.TOOLS) do
+    if t == name then
+      self:set_tool(i)
+      self.editor.tool = name
+      self:refresh_tool()
     end
   end
-  local entries = {
-    { name = "Copy (Ctrl + C)", invoke = function() ed:copy() end },
-    { name = "Cut (Ctrl + X)", invoke = run(function() return ed:cut() end) },
-    { name = "Delete (Del)", invoke = run(function() return ed:delete_selection() end) },
-    { name = "--- Shift left by grid (Left)", invoke = run(function() return ed:shift_selection(-math.max(ed:grid_now(), 16)) end) },
-    { name = "Shift right by grid (Right)", invoke = run(function() return ed:shift_selection(math.max(ed:grid_now(), 16)) end) },
-  }
-  for _, f in ipairs({ 50, 75, 125, 150 }) do
-    entries[#entries + 1] = { name = string.format("Scale around center:%d %%", f), invoke = run(function() return ed:scale_selection(f / 100, "center") end) }
+end
+
+-- Zoom on the current pattern (the center of the view in neighbours mode,
+-- the pattern under the mouse in Pattern range mode).
+function App:zoom_to_current()
+  local segs = self.editor:segments()
+  local target
+  local g = self.editor.cursor_g
+  if self.session.settings.mode == S.MODE_RANGE and g then
+    target = TL.locate(self.session.doc.timeline, g)
+  else
+    local seq = self.session:center_seq()
+    for _, sg in ipairs(segs) do
+      if sg.seq == seq then target = sg end
+    end
   end
-  for _, f in ipairs({ 50, 75, 125, 150 }) do
-    entries[#entries + 1] = { name = string.format("Scale from bottom:%d %%", f), invoke = run(function() return ed:scale_selection(f / 100, "bottom") end) }
-  end
-  renoise.app():show_menu(self.dialog, entries)
+  target = target or segs[1]
+  if not target then return end
+  self.view.start_g = target.offset
+  self.view.span_g = math.max(G.MIN_SPAN, target.len_g)
+  G.clamp(self.view, self.editor:total_g())
+  self:update_scrollbar()
+  self:after_view_change()
 end
 
 --------------------------------------------------------------------------------

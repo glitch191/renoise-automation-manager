@@ -21,6 +21,7 @@ function M.create()
     snap_grid = 1,                 -- index in editor GRIDS (1 = line)
     inactive_opacity = 35,         -- percent
     live_writes = true,            -- write drags and pencil strokes while the mouse moves
+    lock_zoom = false,             -- keep the time zoom when the shown patterns change
     follow_playback = true,
     legend_visible = true,
     diagnostics = false,

@@ -337,3 +337,35 @@ T.test("the corner grip resizes the window while dragging", function()
   end)
   no_errors()
 end)
+
+T.test("right-click menu like the native editor", function()
+  local song = make_song()
+  load_tool(song)
+  run(function()
+    env.entries[1].invoke()
+    local dlg = env.dialogs[#env.dialogs]
+    local canvas = canvas_of(dlg)
+    mouse(canvas, "down", 50, 50, "right")
+    local menu = env.menus[#env.menus]
+    T.ok(menu, "menu shown")
+    local names = {}
+    for _, e in ipairs(menu) do names[e.name] = e end
+    for _, n in ipairs({ "Cut (Ctrl + X)", "Paste Continuously (Ctrl + P)", "Insert Paste (Ctrl + I)",
+      "--- Cut Selected Time (Ctrl + K)", "Delete Envelope", "--- Process:Flip Selection (Ctrl + F)",
+      "Process:Create Sine Curve", "--- Lock Zoom", "Zoom Out Fully", "Zoom To Current",
+      "Draw Tool (P)", "Line Tool (L)" }) do
+      T.ok(names[n], "entry " .. n)
+    end
+    names["Process:Create Linear Curve"].invoke()
+    T.eq(song._undo[#song._undo].desc, "Multi Automation: Create linear curve")
+    names["Zoom To Current"].invoke()
+    names["--- Lock Zoom"].invoke()
+    T.eq(env.tool.preferences.lock_zoom.value, true)
+    names["Line Tool (L)"].invoke()
+    names["Delete Envelope"].invoke()
+    T.eq(song._undo[#song._undo].desc, "Multi Automation: Delete envelope")
+    env.tool.app_idle_observable:fire()
+    render(canvas_of(env.dialogs[#env.dialogs]))
+  end)
+  no_errors()
+end)

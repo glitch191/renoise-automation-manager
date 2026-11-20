@@ -61,6 +61,7 @@ function E.new(opts)
   -- mouse moves (throttled), all in one batch undo step
   self.live_writes = (opts.live_writes ~= false)
   self.clock = opts.clock or os.clock
+  self.random = opts.random or math.random
   self.last_live = nil
   return self
 end
@@ -354,12 +355,19 @@ function E:on_down(ev, fx)
   self.just_activated = false
   if self.drag then return fx end
 
-  if ev.button == "right" and self.tool == "range" then
-    if self.range then fx.menu = "range" end
+  if ev.button == "right" then
+    -- context menu (like the native Automation editor); a right click on a
+    -- point of the active lane selects it first
+    local p = self:hit_point(x, y)
+    if p and p.seg.editable and not (self.selection[p.pattern] and self.selection[p.pattern][p.t]) then
+      self.selection = { [p.pattern] = { [p.t] = true } }
+      fx.redraw = true
+    end
+    fx.menu = "context"
     return fx
   end
-  -- delete: right click or Alt + left click on a point of the active lane
-  if ev.button == "right" or (ev.button == "left" and ev.mods.alt) then
+  -- delete: Alt + left click on a point of the active lane
+  if ev.button == "left" and ev.mods.alt then
     local p = self:hit_point(x, y)
     if p then
       if not p.seg.editable then
@@ -377,7 +385,6 @@ function E:on_down(ev, fx)
       fx.redraw = true
       return fx
     end
-    if ev.button == "right" and self:has_selection() then fx.menu = "selection" end
     return fx
   end
   if ev.button ~= "left" then return fx end
@@ -986,6 +993,284 @@ function E:shift_range(dt)
   return c
 end
 
+--------------------------------------------------------------------------------
+-- Context menu operations, modelled on the native Automation editor menu.
+-- They work in global time on the active lane (or, with a range of the
+-- Range tool, on every visible lane for the clipboard and time operations).
+
+-- Selected time span: the range, or the span of the selected points of the
+-- active lane. Returns g0, g1 or nil.
+function E:op_span()
+  if self.range then return self.range[1], self.range[2] end
+  local lane = self:active_lane()
+  if not lane or not self:has_selection() then return nil end
+  local g0, g1
+  for pattern, set in pairs(self.selection) do
+    local seg = self:first_segment_of(pattern, true)
+    if seg then
+      for t in pairs(set) do
+        local g = T.global(seg, t)
+        g0 = g0 and math.min(g0, g) or g
+        g1 = g1 and math.max(g1, g) or g
+      end
+    end
+  end
+  if g0 and g1 > g0 then return g0, g1 end
+  return nil
+end
+
+-- Editable segment under global time g (or nil).
+function E:editable_segment_at(g)
+  local seg = T.locate(self.doc.timeline, g)
+  if seg and seg.editable then return seg end
+  return nil
+end
+
+-- Span used by the Process commands: the selected time, or the editable
+-- pattern under the mouse, or the first editable pattern.
+function E:process_span()
+  local g0, g1 = self:op_span()
+  if g0 then return g0, g1 end
+  local seg = self.cursor_g and self:editable_segment_at(self.cursor_g)
+  if not seg then
+    for _, s in ipairs(self:segments()) do
+      if s.editable then seg = s break end
+    end
+  end
+  if not seg then return nil end
+  return seg.offset, seg.offset + seg.len_g - 1
+end
+
+-- Points of a lane between g0 and g1 (global), editable patterns only.
+function E:lane_items(lane, g0, g1)
+  local out, seen = {}, {}
+  for _, s in ipairs(self:segments()) do
+    local data = lane.data[s.pattern]
+    if s.editable and data and s.offset + s.len_g > g0 and s.offset <= g1 then
+      for k = 1, #data.points do
+        local p = data.points[k]
+        local g = T.global(s, p.t)
+        if g >= g0 and g <= g1 and not seen[g] then
+          seen[g] = true
+          out[#out + 1] = { g = g, v = p.v, s = p.s or 0 }
+        end
+      end
+    end
+  end
+  table.sort(out, function(a, b) return a.g < b.g end)
+  return out
+end
+
+-- Replace [g0, g1] of a lane with absolute items { g, v, s }.
+function E:write_span(c, lane, g0, g1, items)
+  local rel = {}
+  for i = 1, #items do
+    local it = items[i]
+    if it.g >= g0 and it.g <= g1 then rel[#rel + 1] = { dg = it.g - g0, v = P.clamp_v(it.v), s = it.s or 0 } end
+  end
+  self:replace_lane_range(c, lane, g0, g1 - g0, rel)
+end
+
+-- Step between generated points: the snap grid, a quarter line when free.
+function E:curve_step()
+  local g = self.grid or 256
+  if not self.snap or g < 16 then g = 64 end
+  return g
+end
+
+-- Process commands on the active lane: flip, mirror, humanize, random,
+-- exponential, linear, sine. One undo step each.
+E.PROCESS_LABELS = {
+  flip = "Flip selection", mirror = "Mirror selection", humanize = "Humanize selection",
+  random = "Create random points", exponential = "Create exponential curve",
+  linear = "Create linear curve", sine = "Create sine curve",
+}
+
+function E:process(kind)
+  local lane = self:active_lane()
+  if not lane then return nil end
+  local g0, g1 = self:process_span()
+  if not g0 then return nil end
+  local items = {}
+  if kind == "flip" or kind == "mirror" or kind == "humanize" then
+    local cur = self:lane_items(lane, g0, g1)
+    if #cur == 0 then return nil end
+    for i = 1, #cur do
+      local it = cur[i]
+      if kind == "flip" then
+        items[i] = { g = it.g, v = 1 - it.v, s = it.s }
+      elseif kind == "mirror" then
+        items[i] = { g = g0 + g1 - it.g, v = it.v, s = 0 }
+      else
+        items[i] = { g = it.g, v = P.clamp_v(it.v + (self.random() * 2 - 1) * 0.05), s = it.s }
+      end
+    end
+  else
+    local step = self:curve_step()
+    local span = math.max(1, g1 - g0)
+    if kind == "linear" then
+      items = { { g = g0, v = 0 }, { g = g1, v = 1 } }
+    else
+      local g = g0
+      while g <= g1 do
+        local f = (g - g0) / span
+        local v
+        if kind == "random" then v = self.random()
+        elseif kind == "exponential" then v = f * f * f
+        else v = 0.5 + 0.5 * math.sin(2 * math.pi * f) end
+        items[#items + 1] = { g = g, v = v }
+        g = g + step
+      end
+      if items[#items].g < g1 and kind ~= "random" then
+        local f = 1
+        items[#items + 1] = { g = g1, v = (kind == "exponential") and 1 or (0.5 + 0.5 * math.sin(2 * math.pi * f)) }
+      end
+    end
+  end
+  local c = new_commit(E.PROCESS_LABELS[kind] or "Process")
+  self:write_span(c, lane, g0, g1, items)
+  self.selection = {}
+  if #c.writes == 0 then return nil end
+  return c
+end
+
+-- Lanes and items of the clipboard: the range clip for every visible lane
+-- it holds, or the point clip for the active lane. Returns list, span.
+function E:clip_targets()
+  local cb = self.clipboard
+  local out = {}
+  if cb.last == "range" and cb.range then
+    for key, items in pairs(cb.range.lanes) do
+      local lane = self:lane(key)
+      if lane and not lane.hidden then out[#out + 1] = { lane = lane, items = items } end
+    end
+    table.sort(out, function(a, b) return a.lane.key < b.lane.key end)
+    return out, cb.range.span
+  elseif cb.clip and #cb.clip.items > 0 then
+    local lane = self:active_lane()
+    if lane then out[1] = { lane = lane, items = cb.clip.items } end
+    return out, cb.clip.span
+  end
+  return out, 0
+end
+
+function E:paste_position()
+  return self:clamp_g(P.snap_t(self.cursor_g or self.view.start_g, self:grid_now(nil)))
+end
+
+-- Paste the clipboard again and again from the mouse position to the end
+-- of the pattern under it.
+function E:paste_continuously()
+  local targets, span = self:clip_targets()
+  if #targets == 0 then return nil end
+  local g = self:paste_position()
+  local seg = self:editable_segment_at(g)
+  if not seg then return nil end
+  local seg_end = seg.offset + seg.len_g - 1
+  local period = span + self:curve_step()
+  local c = new_commit("Paste continuously")
+  for _, tg in ipairs(targets) do
+    local items = {}
+    local base = g
+    while base <= seg_end do
+      for k = 1, #tg.items do
+        local it = tg.items[k]
+        local ig = base + it.dg
+        if ig <= seg_end then items[#items + 1] = { g = ig, v = it.v, s = it.s } end
+      end
+      base = base + period
+    end
+    self:write_span(c, tg.lane, g, seg_end, items)
+  end
+  self.selection = {}
+  if #c.writes == 0 then return nil end
+  return c
+end
+
+-- Paste at the mouse position and push the later points of that pattern to
+-- the right by the clipboard length (points pushed past the end are lost).
+function E:insert_paste()
+  local targets, span = self:clip_targets()
+  if #targets == 0 then return nil end
+  local g = self:paste_position()
+  local seg = self:editable_segment_at(g)
+  if not seg then return nil end
+  local seg_end = seg.offset + seg.len_g - 1
+  local period = span + self:curve_step()
+  local c = new_commit("Insert paste")
+  for _, tg in ipairs(targets) do
+    local items = {}
+    for _, it in ipairs(self:lane_items(tg.lane, g, seg_end)) do
+      if it.g + period <= seg_end then items[#items + 1] = { g = it.g + period, v = it.v, s = it.s } end
+    end
+    for k = 1, #tg.items do
+      local it = tg.items[k]
+      if g + it.dg <= seg_end then items[#items + 1] = { g = g + it.dg, v = it.v, s = it.s } end
+    end
+    self:write_span(c, tg.lane, g, seg_end, items)
+  end
+  self.selection = {}
+  if #c.writes == 0 then return nil end
+  return c
+end
+
+-- Copy the selected time, remove it and pull the later points of each
+-- pattern to the left (range: every visible lane; else the active lane).
+function E:cut_time()
+  local g0, g1 = self:op_span()
+  if not g0 then return nil end
+  local lanes
+  if self.range then
+    self:copy_range()
+    lanes = self:visible_lanes()
+  else
+    self:copy()
+    lanes = { self:active_lane() }
+  end
+  local c = new_commit("Cut selected time")
+  for _, lane in ipairs(lanes) do
+    for _, sg in ipairs(self:segments()) do
+      local s0, s1 = sg.offset, sg.offset + sg.len_g - 1
+      if sg.editable and g1 >= s0 and g0 <= s1 then
+        local a, b = math.max(g0, s0), math.min(g1, s1)
+        local cut = b - a + 1
+        local items = {}
+        for _, it in ipairs(self:lane_items(lane, s0, s1)) do
+          if it.g < a then items[#items + 1] = it
+          elseif it.g > b then items[#items + 1] = { g = it.g - cut, v = it.v, s = it.s } end
+        end
+        local data = lane.data[sg.pattern]
+        if data and data.exists then self:write_span(c, lane, s0, s1, items) end
+      end
+    end
+  end
+  self.range = nil
+  self.selection = {}
+  if #c.writes == 0 then return nil end
+  return c
+end
+
+-- Delete the automation of the active lane in every editable pattern.
+function E:delete_envelope()
+  local lane = self:active_lane()
+  if not lane then return nil end
+  local c = new_commit("Delete envelope")
+  local done = {}
+  for _, sg in ipairs(self:segments()) do
+    local data = lane.data[sg.pattern]
+    if sg.editable and data and data.exists and not done[sg.pattern] then
+      done[sg.pattern] = true
+      c.writes[#c.writes + 1] = { key = lane.key, pattern = sg.pattern, delete = true }
+      data.points = {}
+      data.exists = false
+      data.rev = (data.rev or 0) + 1
+    end
+  end
+  self.selection = {}
+  if #c.writes == 0 then return nil end
+  return c
+end
+
 function E:copy()
   local lane = self:active_lane()
   if not lane or not self:has_selection() then return false end
@@ -1164,6 +1449,21 @@ function E:key(name, mods)
       return fx
     elseif name == "x" and self.range then
       fx.commit = self:cut_range()
+      return fx
+    elseif name == "p" then
+      fx.commit = self:paste_continuously()
+      return fx
+    elseif name == "i" then
+      fx.commit = self:insert_paste()
+      return fx
+    elseif name == "k" then
+      fx.commit = self:cut_time()
+      return fx
+    elseif name == "f" then
+      fx.commit = mods.shift and self:process("mirror") or self:process("flip")
+      return fx
+    elseif name == "r" then
+      fx.commit = self:process("humanize")
       return fx
     elseif name == "c" then
       if self:copy() then fx.status = "Copied." end

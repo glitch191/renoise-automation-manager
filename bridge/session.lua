@@ -324,7 +324,7 @@ function S:commit(commit)
   self.writing = false
   -- creating an automation changes the lists we are subscribed to
   for i = 1, #commit.writes do
-    if commit.writes[i].create then self.dirty.structure = true end
+    if commit.writes[i].create or commit.writes[i].delete then self.dirty.structure = true end
   end
   if not ok then
     self.log("[commit] " .. tostring(err))

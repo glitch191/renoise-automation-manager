@@ -63,17 +63,33 @@ The window has a toolbar, a legend on the left and the curve canvas.
 | --- | --- |
 | Shift while dragging | Fine move (one tenth), without snap |
 | Ctrl while dragging | Constrain to one axis |
-| Right-click or Alt + click on a point | Delete it |
-| Right-click with a selection | Menu: copy, cut, delete, shift, scale around center or from bottom |
+| Alt + click on a point | Delete it |
+| Right-click | Context menu (see below); a right-click on a point selects it, it never deletes |
 | Alt + wheel (Alt + Shift + wheel) | Scale selected values around center (from bottom) |
 | Left, Right | Shift the selection by one grid step (Shift: 1/256 line) |
 | Del | Delete the selection |
 | Ctrl + C, Ctrl + X, Ctrl + V | Copy, cut, paste at the mouse position (works on another curve or pattern; with the Range tool, on every visible curve) |
+| Ctrl + P, Ctrl + I | Paste continuously, insert paste |
+| Ctrl + K | Cut the selected time |
+| Ctrl + F, Ctrl + Shift + F, Ctrl + R | Flip, mirror, humanize the selection |
 | Tab, Shift + Tab | Next, previous curve |
 | Wheel | Scroll in time |
 | Ctrl + wheel | Zoom in time around the mouse |
 | Ctrl + plus, Ctrl + minus, Ctrl + 0 | Interface zoom up, down, back to 125 % |
 | Esc | Cancel the gesture, the range or the selection; close the window |
+
+**Context menu** (right-click), modelled on the native Automation editor menu:
+
+- *Cut*, *Copy*, *Paste*: the selected points, or with the Range tool the range of every visible curve.
+- *Paste Continuously*: repeats the clipboard from the mouse position to the end of that pattern.
+- *Insert Paste*: pastes at the mouse position and pushes the later points of that pattern to the right.
+- *Cut Selected Time*: copies the selected time (range, or span of the selected points), removes it and pulls the later points to the left.
+- *Delete Envelope*: deletes the automation of the active curve in the editable patterns.
+- *Process*: flip, mirror, humanize the selection; create random points, an exponential, linear or sine curve over the selected time (or the pattern under the mouse when nothing is selected), at the snap grid; scale the selected values.
+- *Lock Zoom* (keep the time zoom when the shown patterns change), *Zoom Out Fully*, *Zoom To Current* (the current pattern, or the one under the mouse in Pattern range mode).
+- The tools, and the interpolation of the active curve.
+
+The generated curves go from bottom to top; use Flip and Mirror to turn them around. Renoise does not document the exact behaviour of its own menu commands, so these follow their names and may differ in details.
 
 Other toolbar controls: *Snap* and the grid (Line, 1/2, 1/4, 1/8, Free), the interpolation of the active curve (Points, Lines, Curves), *Add lane* (menu of automatable parameters without automation), *Lock track* (keep showing this track), *Follow* (follow playback), *Fit* (show the whole range), *Legend*, *Settings*.
 
@@ -106,7 +122,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 1. Install the `.xrnx` (drag and drop), open the tool from the Tools menu, the Track Automation menu and the shortcut.
 2. On a track with 8 automations: 8 distinct curves; hide one in the legend, it disappears; save, close and reopen the song: hidden state and colors are restored.
 3. Click near an inactive curve: it becomes active, no point changes; Tab cycles curves; the native Automation editor follows.
-4. Double-click adds a point, drag moves it (with Shift and Ctrl), right-click deletes it, snap grid works.
+4. Double-click adds a point, drag moves it (with Shift and Ctrl), Alt + click deletes it, right-click opens the menu without deleting, snap grid works.
 5. Pencil, Line (also across two patterns in Pattern range mode), rectangle selection, scale, shift, copy and paste to another curve and pattern, interpolation change, Add lane.
 6. Ctrl + Z in Renoise undoes each gesture in one step.
 7. Edit a point in the native editor: the tool updates in under half a second, and the reverse.
@@ -119,6 +135,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 14. Ruler and value axis readable at every zoom.
 15. Pattern range mode: drag a point into the next pattern. Range tool: copy a passage of every curve, paste it in another pattern, shift it, delete it.
 16. Drag the resize grip in the bottom right corner: the window follows the mouse in both directions, keeps the size after closing and reopening; release outside the window works too.
+17. Every entry of the right-click menu, and its shortcut; Ctrl + Z undoes each in one step.
 
 ## Development
 

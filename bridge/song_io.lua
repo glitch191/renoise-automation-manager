@@ -211,6 +211,10 @@ function IO.apply_commit(song, doc, commit)
       assert(pattern, "pattern not found: " .. tostring(w.pattern))
       local pt = pattern.tracks[doc.track_index]
       local a = pt:find_automation(param)
+      if w.delete then
+        if a then pt:delete_automation(param) end
+        return
+      end
       if not a then
         assert(param.is_automatable, lane.name .. " is not automatable")
         a = pt:create_automation(param)

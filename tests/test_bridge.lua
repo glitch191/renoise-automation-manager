@@ -361,3 +361,16 @@ T.test("hidden lanes and colors follow a moved track", function()
   T.eq(s:track_data().colors[key], color)
   T.eq(s.td.tracks[1], nil, "nothing left on the track now at index 1")
 end)
+
+T.test("a delete write removes the automation and rebuilds the lanes", function()
+  local song, p = make_song()
+  local s = session(song)
+  local key = s.doc.lanes[1].key
+  local ok = s:commit({ description = "Multi Automation: Delete envelope", batch = false,
+    writes = { { key = key, pattern = 1, delete = true } } })
+  T.ok(ok)
+  T.eq(song.patterns[1].tracks[1]:find_automation(p.cutoff), nil)
+  T.eq(song._undo[#song._undo].desc, "Multi Automation: Delete envelope")
+  s:idle()
+  T.eq(s.doc.lanes[1].name, "Delay: Feedback", "Cutoff lane gone from the current pattern")
+end)

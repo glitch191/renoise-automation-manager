@@ -138,16 +138,19 @@ T.test("drag beyond the pattern end and above 1 is clamped", function()
   T.eq(p.v, 1)
 end)
 
-T.test("right click and Alt click delete a point", function()
+T.test("right click opens the menu without deleting; Alt click deletes", function()
   local doc = one_lane_doc(pts({ 256, 0.1, 512, 0.2, 768, 0.3 }))
   local ed = setup(doc)
   local x, y = pos(ed, 1, 512, 0.2)
   local fx = ed:mouse(ev("down", x, y, "right"))
-  T.eq(fx.commit.description, "Multi Automation: Delete point")
-  T.eq(fx.commit.writes[1].points, pts({ 256, 0.1, 768, 0.3 }))
+  T.eq(fx.commit, nil, "nothing deleted")
+  T.eq(fx.menu, "context")
+  T.ok(ed.selection[1][512], "the point under the mouse is selected")
+  T.eq(#doc.lanes[1].data[1].points, 3)
+  T.eq(ed:mouse(ev("down", 10, 10, "right")).menu, "context", "menu on empty space too")
   local x2, y2 = pos(ed, 1, 768, 0.3)
   local fx2 = ed:mouse(ev("down", x2, y2, "left", { alt = true }))
-  T.eq(fx2.commit.writes[1].points, pts({ 256, 0.1 }))
+  T.eq(fx2.commit.writes[1].points, pts({ 256, 0.1, 512, 0.2 }))
 end)
 
 T.test("pencil stroke writes grid points and replaces the drawn range", function()
@@ -553,4 +556,100 @@ T.test("hidden lanes are left out of range edits; Esc clears the range", functio
   T.eq(fx.commit.writes[1].key, "lane1")
   ed:key("esc", {})
   T.eq(ed.range, nil)
+end)
+
+T.test("process: flip, mirror and humanize the selection", function()
+  local doc = one_lane_doc(pts({ 256, 0.1, 512, 0.2, 768, 0.9, 1024, 0.5 }))
+  local ed = setup(doc)
+  ed.selection = { [1] = { [256] = true, [768] = true } }
+  local c = ed:process("flip")
+  T.eq(c.description, "Multi Automation: Flip selection")
+  local p = c.writes[1].points
+  T.near(p[1].v, 0.9, 1e-9)
+  T.near(p[2].v, 0.8, 1e-9)
+  T.near(p[3].v, 0.1, 1e-9)
+  T.near(p[4].v, 0.5, 1e-9, "outside the span: untouched")
+  doc = one_lane_doc(pts({ 256, 0.1, 512, 0.2, 1024, 0.9 }))
+  ed = setup(doc)
+  ed.range = { 0, 768 }
+  p = ed:process("mirror").writes[1].points
+  T.eq(p, pts({ 256, 0.9, 768, 0.2, 1024, 0.1 }))
+  ed.random = function() return 1 end
+  p = ed:process("humanize").writes[1].points
+  T.near(p[1].v, 0.95, 1e-9)
+end)
+
+T.test("process: create curves over the selected time or the pattern", function()
+  local doc = one_lane_doc(pts({ 256, 0.5 }), 16)
+  local ed = setup(doc, { snap = true, grid = 256 })
+  ed.range = { 0, 256 * 4 }
+  local p = ed:process("linear").writes[1].points
+  T.eq(p, pts({ 256, 0, 256 * 5, 1 }))
+  p = ed:process("exponential").writes[1].points
+  T.eq(#p, 5)
+  T.near(p[3].v, 0.125, 1e-9)
+  T.eq(p[5].v, 1)
+  p = ed:process("sine").writes[1].points
+  T.near(p[2].v, 1, 1e-9, "quarter period at the top")
+  ed.range = nil
+  ed.random = function() return 0.25 end
+  p = ed:process("random").writes[1].points
+  T.eq(#p, 16, "one point per line over the whole pattern")
+  T.eq(p[1].v, 0.25)
+end)
+
+T.test("paste continuously and insert paste", function()
+  local doc = one_lane_doc(pts({ 256, 0.1, 512, 0.2, 256 * 12, 0.7 }), 16)
+  local ed = setup(doc, { snap = true, grid = 256 })
+  ed.selection = { [1] = { [256] = true, [512] = true } }
+  ed:copy()
+  ed.cursor_g = 256 * 8
+  local c = ed:paste_continuously()
+  T.eq(c.description, "Multi Automation: Paste continuously")
+  local p = c.writes[1].points
+  -- clip of 2 points, period 2 lines: lines 8, 9, 10, 11, 12, 13, 14, 15
+  T.eq(#p, 2 + 8)
+  T.eq(p[#p].t, 256 * 16)
+  doc = one_lane_doc(pts({ 256, 0.1, 512, 0.2, 256 * 5, 0.7 }), 16)
+  ed = setup(doc, { snap = true, grid = 256 })
+  ed.selection = { [1] = { [256] = true, [512] = true } }
+  ed:copy()
+  ed.cursor_g = 256 * 2
+  c = ed:insert_paste()
+  T.eq(c.description, "Multi Automation: Insert paste")
+  p = c.writes[1].points
+  T.eq(p, pts({ 256, 0.1, 512, 0.2, 256 * 3, 0.1, 256 * 4, 0.2, 256 * 7, 0.7 }), "line 4 point pushed 2 lines right")
+end)
+
+T.test("cut selected time pulls the rest to the left", function()
+  local doc = one_lane_doc(pts({ 256, 0.1, 256 * 3, 0.2, 256 * 4, 0.3, 256 * 9, 0.7 }), 16)
+  local ed = setup(doc)
+  ed.range = { 256 * 2, 256 * 3 + 255 }
+  local c = ed:cut_time()
+  T.eq(c.description, "Multi Automation: Cut selected time")
+  T.eq(c.writes[1].points, pts({ 256, 0.1, 256 * 7, 0.7 }))
+  T.eq(ed.clipboard.last, "range")
+  T.eq(ed.range, nil)
+end)
+
+T.test("delete envelope removes the automation of the editable patterns", function()
+  local doc = one_lane_doc(pts({ 256, 0.1 }))
+  local ed = setup(doc)
+  local c = ed:delete_envelope()
+  T.eq(c.description, "Multi Automation: Delete envelope")
+  T.eq(c.writes[1].delete, true)
+  T.eq(doc.lanes[1].data[1].exists, false)
+end)
+
+T.test("context shortcuts: Ctrl + K, F, Shift + F, R, P, I", function()
+  local doc = one_lane_doc(pts({ 256, 0.1, 512, 0.2, 768, 0.9 }), 16)
+  local ed = setup(doc)
+  ed.range = { 256, 768 }
+  T.eq(ed:key("f", { control = true }).commit.description, "Multi Automation: Flip selection")
+  T.eq(ed:key("f", { control = true, shift = true }).commit.description, "Multi Automation: Mirror selection")
+  T.eq(ed:key("r", { control = true }).commit.description, "Multi Automation: Humanize selection")
+  T.eq(ed:key("k", { control = true }).commit.description, "Multi Automation: Cut selected time")
+  ed.cursor_g = 256 * 4
+  T.eq(ed:key("p", { control = true }).commit.description, "Multi Automation: Paste continuously")
+  T.eq(ed:key("i", { control = true }).commit.description, "Multi Automation: Insert paste")
 end)
