@@ -412,8 +412,19 @@ function App:build()
   views.zoom = vb:text { text = "", style = "disabled", width = math.floor(d.total_w * 0.3), height = d.status_h,
     tooltip = "How much of the time range the canvas shows. Ctrl + wheel zooms around the mouse, Fit shows everything." }
   views.status = vb:text { text = "", width = math.floor(d.total_w * 0.35), height = d.status_h }
-  views.diag = vb:text { text = "", font = "mono", align = "right", width = math.floor(d.total_w * 0.35) - 2 * d.margin, height = d.status_h, visible = p.diagnostics.value }
-  local status_row = vb:row { views = { views.zoom, views.status, views.diag } }
+  -- the diagnostics text keeps its place (empty when off) so the resize
+  -- grip always sits in the bottom right corner
+  views.diag = vb:text { text = "", font = "mono", align = "right",
+    width = math.max(1, math.floor(d.total_w * 0.35) - 2 * d.margin - d.grip_w), height = d.status_h }
+  views.grip = vb:canvas {
+    width = d.grip_w, height = d.status_h, mode = "transparent",
+    cursor = "resize_edge_diagonal_right",
+    tooltip = "Drag to resize the window (applied when the mouse button is released)",
+    mouse_events = { "down", "drag", "up" },
+    mouse_handler = function(ev) return self:on_grip(ev) end,
+    render = function(ctx) self:render_grip(ctx) end,
+  }
+  local status_row = vb:row { views = { views.zoom, views.status, views.diag, views.grip } }
 
   local content = vb:column {
     margin = d.margin, spacing = d.spacing,
@@ -449,6 +460,54 @@ function App:build()
 end
 
 -- Close and rebuild the window keeping state (size, zoom or legend change).
+-- Resize grip: three diagonal strokes in the corner.
+function App:render_grip(ctx)
+  local d = self.d
+  local w, h = d.grip_w, d.status_h
+  local c = theme_color("main_font")
+  ctx.stroke_color = { c[1], c[2], c[3], 150 }
+  ctx.line_width = math.max(1, d.zoom)
+  for k = 1, 3 do
+    local o = k * math.floor(w / 4)
+    ctx:begin_path()
+    ctx:move_to(w - 1, h - 1 - o)
+    ctx:line_to(w - 1 - o, h - 1)
+    ctx:stroke()
+  end
+end
+
+-- Drag the grip: the target size is shown while dragging and applied (as a
+-- custom size) on release. Renoise dialogs cannot be resized by their
+-- border, so the window is rebuilt at the new size.
+function App:on_grip(ev)
+  local ok, err = pcall(function()
+    local x = ev.position and ev.position.x or 0
+    local y = ev.position and ev.position.y or 0
+    local p = self.prefs
+    if ev.type == "down" then
+      local w, h = Prefs.size(p)
+      self.grip = { x0 = x, y0 = y, w = w, h = h, tw = w, th = h }
+    elseif self.grip and (ev.type == "drag" or ev.type == "up") then
+      local g = self.grip
+      g.tw, g.th = L.clamp_size(g.w + (x - g.x0), g.h + (y - g.y0), p.ui_zoom.value, p.legend_visible.value)
+      if ev.type == "drag" then
+        self:set_status(string.format("Window size: %d x %d (release to apply)", g.tw, g.th))
+      else
+        self.grip = nil
+        if g.tw ~= g.w or g.th ~= g.h then
+          p.width.value = g.tw
+          p.height.value = g.th
+          p.size_preset.value = #L.PRESETS + 1
+          -- rebuild outside the mouse handler of the dialog being replaced
+          self.pending_rebuild = true
+        end
+      end
+    end
+  end)
+  if not ok then log("grip: " .. tostring(err)) end
+  return nil
+end
+
 function App:rebuild_window()
   if not self:is_open() then return end
   self.view_state = { start_g = self.view.start_g, span_g = self.view.span_g }
@@ -1178,7 +1237,7 @@ end
 function App:set_diagnostics(on)
   self.prefs.diagnostics.value = on
   self.diag.renders, self.diag.total, self.diag.worst = 0, 0, 0
-  if self.views then self.views.diag.visible = on end
+  if self.views and not on then self.views.diag.text = "" end
 end
 
 --------------------------------------------------------------------------------
@@ -1190,6 +1249,13 @@ function App:idle()
     -- closed with the window button: release every notifier
     self:close()
     return
+  end
+  if self.pending_rebuild then
+    self.pending_rebuild = false
+    local okr, errr = pcall(function() self:rebuild_window() end)
+    if not okr then log("resize: " .. tostring(errr)) end
+    if not self.dialog then return end
+    self:set_status(string.format("Window size: %d x %d", Prefs.size(self.prefs)))
   end
   local ok, err = pcall(function()
     if not self.session then return end
@@ -1254,8 +1320,7 @@ function App:show_settings()
     row("Custom width, height", vb:row { width_box, height_box, vb:button {
       text = "Apply", tooltip = "Use the custom size",
       notifier = function()
-        p.width.value = width_box.value
-        p.height.value = height_box.value
+        p.width.value, p.height.value = L.clamp_size(width_box.value, height_box.value, p.ui_zoom.value, p.legend_visible.value)
         p.size_preset.value = #L.PRESETS + 1
         self:rebuild_window()
       end,

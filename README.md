@@ -85,11 +85,13 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 
 **Values.** The value axis and hovering or dragging a point show the parameter, the time (pattern, line, sub-line, 0-based like the Pattern Editor) and the value. Real values are shown for linear parameters of native devices; other parameters are shown as a percentage. Reading values never changes a parameter.
 
+**Window size.** Drag the grip in the bottom right corner of the window: the status line shows the target size, and the window is rebuilt at that size when you release the mouse button. The size is kept as the Custom size in Settings.
+
 **Settings** (button): interface zoom (100 to 200 %), window size (Compact, Wide, Ultrawide, or a custom width and height), default tool, snap, inactive curve opacity, write while dragging, follow playback, diagnostics. The diagnostics line shows the number of curves and points drawn, average and worst render time of the canvas (Lua drawing time measured with `os.clock`) and the playhead update rate. It can also be toggled with the `Global > Tools > Toggle Multi Automation View Diagnostics` key binding.
 
 ## Known limitations
 
-- The window is a floating Renoise dialog: it cannot be docked in the lower frame and cannot be resized with the mouse. Use the size presets or custom size in Settings.
+- The window is a floating Renoise dialog: it cannot be docked in the lower frame, and Renoise does not let tools resize a dialog by its border. Use the grip in the bottom right corner instead: the window is rebuilt at the new size when the mouse button is released (it may reopen at another position). The scripting API gives no screen size, so the window cannot follow the monitor width automatically.
 - The interface zoom scales sizes, lines and hit areas, but not the fonts of Renoise controls.
 - The Curves interpolation and the point scaling in Lines mode are drawn with an approximation (monotone cubic curve, power curve); Renoise does not document its exact formulas.
 - Real values are approximate for some parameters (linear mapping only); plugin and non-linear parameters are shown as percentages.
@@ -116,6 +118,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 13. Move, insert and delete tracks: hidden curves and colors stay with their track.
 14. Ruler and value axis readable at every zoom.
 15. Pattern range mode: drag a point into the next pattern. Range tool: copy a passage of every curve, paste it in another pattern, shift it, delete it.
+16. Drag the resize grip in the bottom right corner: the status line shows the size, the window is rebuilt at that size on release and keeps it after closing and reopening.
 
 ## Development
 

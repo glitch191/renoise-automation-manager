@@ -57,3 +57,16 @@ T.test("zoom scales tool dimensions", function()
   T.eq(b.point_size, 2 * a.point_size)
   T.near(b.line_active, 2 * a.line_active)
 end)
+
+T.test("clamp_size keeps the toolbar and the minimum canvas", function()
+  for _, z in ipairs({ 1.0, 1.25, 2.0 }) do
+    local w, h = L.clamp_size(10, 10, z, true)
+    local d = L.compute(w, h, z, true)
+    T.ok(d.toolbar_w <= w - 2 * d.margin, "toolbar fits at " .. z)
+    T.eq(d.canvas_h, L.MIN_CANVAS_H)
+    T.ok(d.canvas_w >= L.MIN_CANVAS_W)
+    T.eq(d.total_h, h)
+  end
+  T.eq({ L.clamp_size(1500, 600, 1.25, true) }, { 1500, 600 })
+  T.eq({ L.clamp_size(99999, 99999, 1.25, true) }, { L.MAX_W, L.MAX_H })
+end)

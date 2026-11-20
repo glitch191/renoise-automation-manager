@@ -23,6 +23,8 @@ L.DEFAULT_PRESET = 2
 
 L.MIN_CANVAS_W = 320
 L.MIN_CANVAS_H = 100
+L.MAX_W = 6000
+L.MAX_H = 2400
 
 -- Toolbar control widths (text holding controls, not scaled). The snap and
 -- follow groups also hold a checkbox whose width is the scaled control height.
@@ -100,7 +102,29 @@ function L.compute(width, height, s, legend_visible)
   d.total_w = 2 * d.margin + d.canvas_w + ((d.legend_w > 0) and (d.legend_w + d.spacing) or 0)
   d.total_h = 2 * d.margin + d.toolbar_h + d.canvas_h + d.scrollbar_h + d.status_h + 3 * d.spacing
   d.toolbar_w = L.toolbar_width(s)
+  d.grip_w = r(16 * s)
   return d
+end
+
+-- Smallest window that keeps the toolbar on one line and the minimum
+-- canvas size, at zoom s.
+function L.min_size(s, legend_visible)
+  s = L.clamp_zoom(s)
+  local d = L.compute(0, 0, s, legend_visible)
+  local w = math.max(d.toolbar_w + 2 * d.margin,
+    2 * d.margin + L.MIN_CANVAS_W + ((d.legend_w > 0) and (d.legend_w + d.spacing) or 0))
+  local h = 2 * d.margin + d.toolbar_h + L.MIN_CANVAS_H + d.scrollbar_h + d.status_h + 3 * d.spacing
+  return w, h
+end
+
+-- Clamp a requested window size (resize grip, custom size) to what fits.
+function L.clamp_size(w, h, s, legend_visible)
+  local mw, mh = L.min_size(s, legend_visible)
+  w = math.floor((tonumber(w) or mw) + 0.5)
+  h = math.floor((tonumber(h) or mh) + 0.5)
+  w = math.max(mw, math.min(L.MAX_W, w))
+  h = math.max(mh, math.min(L.MAX_H, h))
+  return w, h
 end
 
 return L
