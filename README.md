@@ -2,9 +2,9 @@
 
 A Renoise tool that shows every graphical automation envelope of a track overlaid in one floating window, each curve in its own color (similar to the automation view of other DAWs), and lets you edit them directly: points, pencil, line, rectangle selection, copy and paste. Changes are written to the song immediately and stay in sync with the native Automation editor.
 
-![The multi automation view in Renoise: three automation curves of one track overlaid, the active Width curve drawn on top with its points](docs/screenshots/main-view.webp)
+![The tool window in Renoise: three automation curves of one track overlaid over two patterns, the active EQ gain curve drawn on top with its points, a time ruler at the bottom and a value axis on the left](docs/screenshots/main-view.webp)
 
-*Three automations of one track (Panning, Volume, Width) overlaid in Pattern + neighbors mode; the active curve is drawn on top with its points, the others are dimmed.*
+*The tool window: three automations of one track (Chorus Rate, DC Offset, EQ Gain) overlaid in Pattern + neighbors mode. The active curve is drawn on top with its points, the others are dimmed, and the gray neighbor pattern is read only (click it to make it the editable one).*
 
 ## Requirements
 
@@ -30,8 +30,14 @@ Drag and drop the `.xrnx` file onto the Renoise window, or double-click it. Reno
 
 ## Opening the tool
 
-- `Tools > Multi Automation View...` in the main menu.
-- `Multi Automation View...` in the right-click menu of the Track Automation editor or of the Pattern Editor.
+- `Multi Automation View...` in the right-click menu of the Track Automation editor (or of the Pattern Editor):
+
+  ![The right-click menu of the native Automation editor, with Multi Automation View at the bottom](docs/screenshots/open-from-automation-menu.png)
+
+- `Tools > Multi Automation View...` in the main menu at the top of the Renoise window:
+
+  ![The Tools menu of Renoise, with Multi Automation View highlighted](docs/screenshots/open-from-tools-menu.png)
+
 - A keyboard shortcut: assign `Global > Tools > Toggle Multi Automation View` in `Edit > Preferences > Keys` (Renoise does not allow tools to set default shortcuts).
 
 ## Using it
