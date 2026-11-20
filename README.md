@@ -107,7 +107,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 
 **Window size.** Drag the grip in the bottom right corner of the window: the window follows the mouse and the status line shows its size. The size is kept as the Custom size in Settings.
 
-**Settings** (button): interface zoom (100 to 200 %), window size (Compact, Wide, Ultrawide, or a custom width and height), default tool, snap, inactive curve opacity, link patterns, write while dragging, follow playback, diagnostics. The diagnostics line shows the number of curves and points drawn, average and worst render time of the canvas (Lua drawing time measured with `os.clock`) and the playhead update rate. It can also be toggled with the `Global > Tools > Toggle Multi Automation View Diagnostics` key binding.
+**Settings** (button; every option explains itself in a tooltip): interface zoom (100 to 200 %), window size (Compact, Wide, Ultrawide, or a custom width and height), default tool, snap, inactive curve opacity, link patterns, write while dragging, follow playback, diagnostics. The diagnostics line shows the number of curves and points drawn, average and worst render time of the canvas (Lua drawing time measured with `os.clock`) and the playhead update rate. It can also be toggled with the `Global > Tools > Toggle Multi Automation View Diagnostics` key binding.
 
 ## Known limitations
 

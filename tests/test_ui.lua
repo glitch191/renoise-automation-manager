@@ -379,3 +379,29 @@ T.test("right-click menu like the native editor", function()
   end)
   no_errors()
 end)
+
+T.test("every Settings row has a tooltip on its label and control", function()
+  local song = make_song()
+  load_tool(song)
+  run(function()
+    env.entries[1].invoke()
+    local dlg = env.dialogs[#env.dialogs]
+    find(dlg.content, function(v) return v.kind == "button" and v.text == "Settings" end).notifier()
+    local sd = env.dialogs[#env.dialogs]
+    local labels = 0
+    local function walk(v)
+      if v.kind == "row" and v.views[1] and v.views[1].kind == "text" and v.views[2] then
+        local label = v.views[1]
+        if label.text and label.text ~= "" then
+          labels = labels + 1
+          T.ok(label.tooltip and #label.tooltip > 20, "label tooltip: " .. label.text)
+          T.ok(v.views[2].tooltip and #v.views[2].tooltip > 20, "control tooltip: " .. label.text)
+        end
+      end
+      for _, c in ipairs(v.views or {}) do walk(c) end
+    end
+    walk(sd.content)
+    T.eq(labels, 10)
+  end)
+  no_errors()
+end)

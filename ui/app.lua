@@ -19,6 +19,20 @@ App.TITLE = "renoise-automation-manager"
 App.LABEL_POOL = 24
 App.RULER_POOL = 48
 App.GRIP_INTERVAL = 0.03 -- seconds between two live resizes
+
+-- Tooltips of the Settings dialog, keyed by the row label.
+App.SETTING_TIPS = {
+  ["Interface zoom"] = "Size of the tool's controls, lines, points and click areas, from 100 to 200 % (default 125 %), on top of the Renoise UI scaling. Fonts are not scaled. Shortcuts: Ctrl + plus, Ctrl + minus, Ctrl + 0.",
+  ["Window size"] = "Size of the window: Compact (1280 x 720 screens), Wide (1920 x 1080, default), Ultrawide (3440 x 1440) or Custom. The grip in the bottom right corner of the window also sets a Custom size.",
+  ["Custom width, height"] = "Width and height of the window for the Custom size, in Renoise view units. Click Apply to use them. Too small values are raised so the toolbar and the curves still fit.",
+  ["Default tool"] = "Tool selected when the window opens: Edit (add, move, select points), Pencil (freehand), Line (straight ramps) or Range (a time range over every visible curve).",
+  ["Inactive curve opacity"] = "How visible the curves that are not active are, from 10 to 90 % (default 35 %). The active curve is always drawn opaque, on top, with its points.",
+  ["Snap"] = "Snap points to the time grid chosen next to Snap in the toolbar (line, 1/2, 1/4, 1/8 of a line or free). Hold Shift while dragging to place a point freely.",
+  ["Link patterns"] = "Join each curve across pattern borders: border points keep the curve continuous from one pattern to the next, and are kept up to date after every edit (same undo step). Next to a read only neighbor, the editable side takes the neighbor's value.",
+  ["Write while dragging"] = "Write drags and pencil strokes to the song while the mouse moves, so the native Automation editor follows live (still one undo step). Off: the song is written when the mouse button is released.",
+  ["Follow playback"] = "While Renoise plays, show the playing pattern and scroll with the playhead. Off: the view stays on the selected pattern.",
+  ["Diagnostics"] = "Show a line with the number of curves and points drawn, the canvas render time (average and worst) and the playhead update rate. Useful to check performance.",
+}
 App.STATUS_SECONDS = 6
 
 local function log(msg)
@@ -1415,16 +1429,21 @@ function App:show_settings()
   for k, pr in ipairs(L.PRESETS) do size_items[k] = string.format("%s (%d x %d)", pr.name, pr.width, pr.height) end
   size_items[#size_items + 1] = "Custom"
   local LABEL_W = 150
+  -- tooltip of every setting, shown on its label and on its control
+  local TIPS = App.SETTING_TIPS
   local function row(label, view)
-    return vb:row { vb:text { text = label, width = LABEL_W }, view }
+    local tip = TIPS[label]
+    if tip then pcall(function() view.tooltip = tip end) end
+    return vb:row { vb:text { text = label, width = LABEL_W, tooltip = tip }, view }
   end
-  local width_box = vb:valuebox { min = 640, max = 4000, value = p.width.value, width = 80 }
-  local height_box = vb:valuebox { min = 300, max = 1600, value = p.height.value, width = 80 }
+  local width_box = vb:valuebox { min = 640, max = 4000, value = p.width.value, width = 80,
+    tooltip = TIPS["Custom width, height"] }
+  local height_box = vb:valuebox { min = 300, max = 1600, value = p.height.value, width = 80,
+    tooltip = TIPS["Custom width, height"] }
   local content = vb:column {
     margin = 8, spacing = 4,
     row("Interface zoom", vb:popup {
       items = zoom_items, value = zoom_index, width = 120,
-      tooltip = "Tool zoom on top of the Renoise UI scaling (default 125 %). Ctrl + plus, Ctrl + minus, Ctrl + 0",
       notifier = function(v) self:set_zoom(L.ZOOM_MIN + (v - 1) * L.ZOOM_STEP) end,
     }),
     row("Window size", vb:popup {
@@ -1468,12 +1487,10 @@ function App:show_settings()
     }),
     row("Link patterns", vb:checkbox {
       value = p.link_patterns.value,
-      tooltip = "Join each curve across pattern borders: border points on the straight line between the last point of a pattern and the first point of the next one, kept up to date after every edit",
       notifier = function(v) if self.editor then self:set_link_patterns(v) else p.link_patterns.value = v end end,
     }),
     row("Write while dragging", vb:checkbox {
       value = p.live_writes.value,
-      tooltip = "Write drags and pencil strokes to the song while the mouse moves (the native editor follows live, still one undo step). Off: write when the mouse button is released.",
       notifier = function(v)
         p.live_writes.value = v
         if self.editor then self.editor.live_writes = v end
@@ -1488,7 +1505,6 @@ function App:show_settings()
     }),
     row("Diagnostics", vb:checkbox {
       value = p.diagnostics.value,
-      tooltip = "Show curve and point counts, render times and playhead update rate in the status line",
       notifier = function(v) self:set_diagnostics(v) end,
     }),
     vb:text { text = App.TITLE .. ", version " .. self.version, style = "disabled" },
