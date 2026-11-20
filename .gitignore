@@ -1,0 +1,25 @@
+# Cached third-party API definitions (cloned locally, never committed)
+.cache/
+
+# Build outputs and verification previews
+out/
+dist/
+*.xrnx
+*.zip
+*.sha256
+
+# Files Renoise writes into the tool folder during development
+preferences.xml
+dev.flag
+
+# Editors and OS files
+.vscode/
+.idea/
+*.swp
+*~
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Logs
+*.log

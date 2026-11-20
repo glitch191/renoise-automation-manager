@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RenoiseScriptingTool doc_version="0">
+  <Id>com.glitch191.RenoiseAutomationManager</Id>
+  <ApiVersion>6.2</ApiVersion>
+  <Version>0.1</Version>
+  <Author>glitch191</Author>
+  <Name>renoise-automation-manager</Name>
+  <Category>Automation, Editing</Category>
+  <Description>Shows all graphical automation envelopes of a track overlaid in one floating view, each with its own color, and lets you edit them directly (points, pencil, line, selection, copy and paste) in sync with Renoise.</Description>
+  <Platform>Windows, Mac, Linux</Platform>
+  <License>MIT</License>
+  <LicensePath>LICENSE</LicensePath>
+</RenoiseScriptingTool>

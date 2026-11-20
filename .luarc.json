@@ -1,0 +1,8 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime.version": "LuaJIT",
+  "runtime.plugin": ".cache/renoise-definitions/plugin.lua",
+  "workspace.library": [".cache/renoise-definitions/library"],
+  "workspace.ignoreDir": [".cache", "out", "dist"],
+  "diagnostics.globals": ["_AUTO_RELOAD_DEBUG"]
+}
