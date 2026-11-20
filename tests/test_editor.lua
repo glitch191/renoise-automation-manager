@@ -294,7 +294,7 @@ T.test("interpolation change writes playmode for editable patterns", function()
   T.eq(ed:set_playmode(3), nil, "no change, no commit")
 end)
 
-T.test("neighbour patterns are read only", function()
+T.test("neighbor patterns are read only", function()
   local doc = X.doc({
     { seq = 1, pattern = 1, lines = 16 },
     { seq = 2, pattern = 2, lines = 16 },
@@ -472,7 +472,7 @@ T.test("points move across a pattern border in Pattern range mode", function()
   T.ok(ed.selection[2] and ed.selection[2][256 * 3], "selection follows the point")
 end)
 
-T.test("neighbour patterns stay read only when moving", function()
+T.test("neighbor patterns stay read only when moving", function()
   local doc = X.doc({
     { seq = 1, pattern = 1, lines = 16 },
     { seq = 2, pattern = 2, lines = 16 },
@@ -654,4 +654,85 @@ T.test("context shortcuts: Ctrl + K, F, Shift + F, R, P, I", function()
   ed.cursor_g = 256 * 4
   T.eq(ed:key("p", { control = true }).commit.description, "Multi Automation: Paste continuously")
   T.eq(ed:key("i", { control = true }).commit.description, "Multi Automation: Insert paste")
+end)
+
+local function two_pattern_doc(a_points, b_points)
+  local doc = X.doc({
+    { seq = 1, pattern = 1, lines = 16 },
+    { seq = 2, pattern = 2, lines = 16 },
+  }, { lanes = 1, points = 0 })
+  local lane = doc.lanes[1]
+  lane.playmode = 2
+  lane.data[1] = { points = pts(a_points), exists = true, rev = 1, lines = 16, playmode = 2 }
+  lane.data[2] = { points = pts(b_points), exists = true, rev = 1, lines = 16, playmode = 2 }
+  return doc
+end
+
+T.test("magnet: a point dragged near the pattern end sticks to the border and the next value", function()
+  local doc = two_pattern_doc({ 256, 0.2, 256 * 14, 0.5 }, { 256, 0.8, 256 * 8, 0.1 })
+  local ed = setup(doc, { snap = true, grid = 256 })
+  ed.live_writes = false
+  local x, y = pos(ed, 1, 256 * 14, 0.5)
+  ed:mouse(ev("down", x, y))
+  -- 3 px before the border, a little under the next pattern's first value
+  local bx = G.g_to_x(ed.view, 16 * 256 - 1) - 3
+  local by = G.v_to_y(ed.view, 0.8) + 3
+  ed:mouse(ev("drag", bx, by))
+  local fx = ed:mouse(ev("up", bx, by))
+  local p
+  for _, w in ipairs(fx.commit.writes) do if w.pattern == 1 then p = w.points end end
+  T.eq(p[#p].t, P.max_t(16), "on the last 1/256 of the pattern")
+  T.eq(p[#p].v, 0.8, "value of the next pattern at the border")
+end)
+
+T.test("magnet: Shift turns it off; far from a border nothing changes", function()
+  local doc = two_pattern_doc({ 256, 0.2, 256 * 14, 0.5 }, { 256, 0.8 })
+  local ed = setup(doc, { snap = true, grid = 256 })
+  local g, v, hit = ed:magnet(8 * 256, 0.3)
+  T.eq(hit, false)
+  T.eq(g, 8 * 256)
+  g, v, hit = ed:magnet(16 * 256 + 2, 0.31)
+  T.eq(hit, true)
+  T.eq(g, 16 * 256, "start of the second pattern")
+  T.eq(v, 0.31, "value too far from the previous pattern's end: kept")
+end)
+
+T.test("link patterns: border points on the line between the two patterns", function()
+  -- last point of pattern 1 at line 12 (0.2), first of pattern 2 at line 4 (0.6)
+  local doc = two_pattern_doc({ 256, 0.1, 256 * 13, 0.2 }, { 256 * 5, 0.6, 256 * 9, 0.4 })
+  local ed = setup(doc)
+  ed.link_patterns = true
+  local c = ed:link_all()
+  T.eq(c.description, "Multi Automation: Link patterns")
+  local a, b = doc.lanes[1].data[1].points, doc.lanes[1].data[2].points
+  local ga, gb = 12 * 256, 16 * 256 + 4 * 256
+  local function on_line(g) return 0.2 + 0.4 * (g - ga) / (gb - ga) end
+  T.eq(a[#a].t, P.max_t(16))
+  T.near(a[#a].v, on_line(16 * 256 - 1), 1e-9)
+  T.eq(b[1].t, P.min_t())
+  T.near(b[1].v, on_line(16 * 256), 1e-9)
+  T.eq(ed:link_all(), nil, "already linked")
+  -- an edit of the last real point updates the border points in the same commit
+  ed.selection = { [1] = { [256 * 13] = true } }
+  local s = ed:shift_selection(-256)
+  ed:add_links(s)
+  local pa = nil
+  for _, w in ipairs(s.writes) do if w.pattern == 2 then pa = w end end
+  T.ok(pa, "pattern 2 border updated in the same undo step")
+end)
+
+T.test("link patterns: neighbor patterns stay read only", function()
+  local doc = X.doc({
+    { seq = 1, pattern = 1, lines = 16 },
+    { seq = 2, pattern = 2, lines = 16 },
+  }, { lanes = 1, points = 0, editable = function(seq) return seq == 1 end })
+  local lane = doc.lanes[1]
+  lane.data[1] = { points = pts({ 256 * 13, 0.2 }), exists = true, rev = 1, lines = 16, playmode = 2 }
+  lane.data[2] = { points = pts({ 256 * 5, 0.6 }), exists = true, rev = 1, lines = 16, playmode = 2 }
+  local ed = setup(doc)
+  ed.link_patterns = true
+  local c = ed:link_all()
+  T.eq(#c.writes, 1)
+  T.eq(c.writes[1].pattern, 1)
+  T.eq(#lane.data[2].points, 1, "neighbor untouched")
 end)

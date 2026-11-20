@@ -123,7 +123,7 @@ local range = X.doc({
   { seq = 3, pattern = 1, lines = 32 },
   { seq = 4, pattern = 3, lines = 64, track_alias = true },
 }, { lanes = 6, points = 8 })
-local neighbours = X.doc({
+local neighbors = X.doc({
   { seq = 2, pattern = 2, lines = 32 },
   { seq = 3, pattern = 3, lines = 32 },
   { seq = 4, pattern = 4, lines = 32 },
@@ -140,7 +140,7 @@ for pi = 1, #L.PRESETS do
       { "range", range, { active = "lane1", overlay = function(view)
         return { rect = { view.width * 0.55, view.height * 0.2, view.width * 0.7, view.height * 0.8 } }
       end } },
-      { "neighbours", neighbours, { active = "lane3" } },
+      { "neighbors", neighbors, { active = "lane3" } },
     }
     for _, r in ipairs(runs) do
       local file, overflow = preview(r[1], r[2], pi, zoom, r[3])

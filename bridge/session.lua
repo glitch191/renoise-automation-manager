@@ -22,14 +22,14 @@ S.__index = S
 
 S.MODE_CURRENT = 1
 S.MODE_RANGE = 2
-S.MODE_NEIGHBOURS = 3
+S.MODE_NEIGHBORS = 3
 
 function S.new(song, settings, ui, log)
   local self = setmetatable({}, S)
   self.song = song
   self.log = log or print
   self.ui = ui or {}
-  self.settings = settings -- { mode, range_from, range_to, neighbours, follow_playback }
+  self.settings = settings -- { mode, range_from, range_to, neighbors, follow_playback }
   self.observers = O.new(self.log)
   self.td = D.decode(song.tool_data)
   self.dirty = { structure = true, points = false, selection = false }
@@ -129,8 +129,8 @@ function S:range()
     local b = math.max(1, math.min(n, self.settings.range_to or n))
     if a > b then a, b = b, a end
     return a, b, nil
-  elseif mode == S.MODE_NEIGHBOURS then
-    local k = self.settings.neighbours or 1
+  elseif mode == S.MODE_NEIGHBORS then
+    local k = self.settings.neighbors or 1
     return math.max(1, center - k), math.min(n, center + k), function(seq) return seq == center end
   end
   return center, center, nil

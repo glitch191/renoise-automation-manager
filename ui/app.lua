@@ -123,7 +123,7 @@ function App:session_settings()
     mode = p.time_mode.value,
     range_from = 1,
     range_to = #renoise.song().sequencer.pattern_sequence,
-    neighbours = p.neighbours.value,
+    neighbors = p.neighbors.value,
     follow_playback = p.follow_playback.value,
   }
 end
@@ -150,6 +150,7 @@ function App:start_session()
     snap = p.snap_enabled.value,
     grid = E.GRIDS[p.snap_grid.value] or 256,
     live_writes = p.live_writes.value,
+    link_patterns = p.link_patterns.value,
   })
   self.app_observers:clear("theme")
   self.app_observers:add("theme", renoise.app().theme_observable, function()
@@ -218,7 +219,7 @@ function App:build()
   -- toolbar ---------------------------------------------------------------
   views.mode = vb:popup {
     items = Prefs.TIME_MODES, value = p.time_mode.value, width = L.W.mode, height = ch,
-    tooltip = "Time mode: Current pattern, Pattern range (several sequence positions), Pattern + neighbours (read only neighbours)",
+    tooltip = "Time mode: Current pattern, Pattern range (several sequence positions), Pattern + neighbors (read only neighbors)",
     notifier = function(v) self:set_mode(v) end,
   }
   views.range_from = vb:valuebox {
@@ -237,12 +238,12 @@ function App:build()
     notifier = function() self:whole_song() end,
   }
   views.range_group = vb:row { spacing = 0, views = { views.range_from, views.range_to, views.whole_song } }
-  views.neighbours = vb:valuebox {
-    min = 1, max = 4, value = p.neighbours.value, width = 60, height = ch,
-    tooltip = "Number of neighbour patterns shown before and after the current one (1 to 4)",
-    notifier = function(v) self:set_neighbours(v) end,
+  views.neighbors = vb:valuebox {
+    min = 1, max = 4, value = p.neighbors.value, width = 60, height = ch,
+    tooltip = "Number of neighbor patterns shown before and after the current one (1 to 4)",
+    notifier = function(v) self:set_neighbors(v) end,
   }
-  views.mode_extra = vb:row { width = L.W.range, views = { views.range_group, views.neighbours } }
+  views.mode_extra = vb:row { width = L.W.range, views = { views.range_group, views.neighbors } }
 
   views.tool = vb:switch {
     items = E.TOOL_LABELS, width = L.W.tool, height = ch,
@@ -956,6 +957,7 @@ end
 function App:apply_fx(fx)
   if not fx then return end
   if fx.commit then
+    self.editor:add_links(fx.commit)
     self.session:commit(fx.commit)
     if fx.commit.writes and #fx.commit.writes > 0 then self:refresh_interp() end
   end
@@ -1100,7 +1102,7 @@ function App:update_mode_controls()
   self.updating = true
   v.mode.value = mode
   v.range_group.visible = mode == S.MODE_RANGE
-  v.neighbours.visible = mode == S.MODE_NEIGHBOURS
+  v.neighbors.visible = mode == S.MODE_NEIGHBORS
   local st = self.session.settings
   st.range_from = math.max(1, math.min(n, st.range_from or 1))
   st.range_to = math.max(1, math.min(n, st.range_to or n))
@@ -1125,11 +1127,11 @@ function App:whole_song()
   self.session:rebuild("range")
 end
 
-function App:set_neighbours(v)
+function App:set_neighbors(v)
   if self.updating then return end
-  self.prefs.neighbours.value = v
-  self.session.settings.neighbours = v
-  self.session:rebuild("neighbours")
+  self.prefs.neighbors.value = v
+  self.session.settings.neighbors = v
+  self.session:rebuild("neighbors")
 end
 
 function App:set_follow(v)
@@ -1259,6 +1261,8 @@ function App:context_menu()
       invoke = run(function() return ed:scale_selection(f / 100, "bottom") end) }
   end
   local more = {
+    { name = "---Link Patterns", selected = self.prefs.link_patterns.value,
+      invoke = function() self:set_link_patterns(not self.prefs.link_patterns.value) end },
     { name = "---Lock Zoom", selected = self.prefs.lock_zoom.value,
       invoke = function() self.prefs.lock_zoom.value = not self.prefs.lock_zoom.value end },
     { name = "Zoom Out Fully", invoke = function() self:fit() end },
@@ -1275,6 +1279,20 @@ function App:context_menu()
   renoise.app():show_menu(self.dialog, entries)
 end
 
+-- Link patterns option: on, the curves are joined across pattern borders
+-- right away and after every edit.
+function App:set_link_patterns(on)
+  self.prefs.link_patterns.value = on and true or false
+  self.editor.link_patterns = self.prefs.link_patterns.value
+  if on then
+    local c = self.editor:link_all()
+    self:apply_fx({ commit = c, redraw = true,
+      status = c and "Link patterns: curves joined across pattern borders." or "Link patterns on." })
+  else
+    self:set_status("Link patterns off.")
+  end
+end
+
 function App:select_tool(name)
   for i, t in ipairs(E.TOOLS) do
     if t == name then
@@ -1285,7 +1303,7 @@ function App:select_tool(name)
   end
 end
 
--- Zoom on the current pattern (the center of the view in neighbours mode,
+-- Zoom on the current pattern (the center of the view in neighbors mode,
 -- the pattern under the mouse in Pattern range mode).
 function App:zoom_to_current()
   local segs = self.editor:segments()
@@ -1443,6 +1461,11 @@ function App:show_settings()
         if self.editor then self:set_snap(v) else p.snap_enabled.value = v end
         if self.views then self.views.snap.value = v end
       end,
+    }),
+    row("Link patterns", vb:checkbox {
+      value = p.link_patterns.value,
+      tooltip = "Join each curve across pattern borders: border points on the straight line between the last point of a pattern and the first point of the next one, kept up to date after every edit",
+      notifier = function(v) if self.editor then self:set_link_patterns(v) else p.link_patterns.value = v end end,
     }),
     row("Write while dragging", vb:checkbox {
       value = p.live_writes.value,

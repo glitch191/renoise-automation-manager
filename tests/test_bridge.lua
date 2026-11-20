@@ -27,7 +27,7 @@ local function make_song()
 end
 
 local function settings(mode)
-  return { mode = mode or S.MODE_CURRENT, range_from = 1, range_to = 4, neighbours = 1, follow_playback = true }
+  return { mode = mode or S.MODE_CURRENT, range_from = 1, range_to = 4, neighbors = 1, follow_playback = true }
 end
 
 T.test("build_doc lists automated parameters with stable keys and colors", function()
@@ -250,7 +250,7 @@ end)
 T.test("mode changes rebuild without comparing parameters with ==", function()
   local song, p = make_song()
   song:select_param(p.fb)
-  for _, mode in ipairs({ S.MODE_RANGE, S.MODE_NEIGHBOURS, S.MODE_CURRENT }) do
+  for _, mode in ipairs({ S.MODE_RANGE, S.MODE_NEIGHBORS, S.MODE_CURRENT }) do
     local s = session(song, mode)
     T.eq(s.active_key, NATIVE .. "Delay#1:1", "selected parameter restored as active lane")
   end
@@ -283,10 +283,10 @@ T.test("locked track deleted: lock released", function()
   T.ok(not s:locked())
 end)
 
-T.test("neighbours mode: only the center pattern is editable", function()
+T.test("neighbors mode: only the center pattern is editable", function()
   local song = make_song()
   song.selected_sequence_index = 2
-  local s = session(song, S.MODE_NEIGHBOURS)
+  local s = session(song, S.MODE_NEIGHBORS)
   local segs = s.doc.timeline.segments
   T.eq(#segs, 3)
   T.ok(not segs[1].editable and segs[2].editable and not segs[3].editable)

@@ -33,7 +33,7 @@ E.GRID_LABELS = { "Line", "1/2", "1/4", "1/8", "Free" }
 
 E.MSG_NO_LANE = "No automation on this track. Use Add lane to create one."
 E.MSG_NO_ACTIVE = "No active lane. Click a curve or a legend row first."
-E.MSG_READ_ONLY = "Neighbour patterns are read only. Edit the center pattern."
+E.MSG_READ_ONLY = "Neighbor patterns are read only. Edit the center pattern."
 E.MSG_LINE_END = "Line: click the end point."
 E.LIVE_INTERVAL = 0.05 -- seconds between two live writes during a gesture
 
@@ -62,6 +62,8 @@ function E.new(opts)
   self.live_writes = (opts.live_writes ~= false)
   self.clock = opts.clock or os.clock
   self.random = opts.random or math.random
+  -- Link patterns: keep the curve continuous across pattern borders
+  self.link_patterns = opts.link_patterns == true
   self.last_live = nil
   return self
 end
@@ -477,6 +479,10 @@ function E:on_down(ev, fx)
     return fx
   elseif tool == "line" then
     local gs = self:clamp_g(P.snap_t(g, grid))
+    if not ev.mods.shift then
+      local mg, mv, hit = self:magnet(g, v, lane)
+      if hit then gs, v = mg, mv end
+    end
     if self.line_anchor then
       local a = self.line_anchor
       self.line_anchor = nil
@@ -560,6 +566,125 @@ function E:apply_move(lane, d, dt, dv)
   return sel
 end
 
+-- Link patterns. Renoise plays each pattern's automation on its own: the
+-- value holds after the last point of a pattern and before the first point
+-- of the next one. When linking is on, the tool keeps two border points
+-- (last 1/256 of the first pattern, first position of the next) on the
+-- straight line between the last point before the border and the first
+-- point after it, so the two patterns read as one continuous line. Only
+-- editable patterns are written; repeated patterns are left alone.
+
+-- Border points of one lane for every pair of adjacent patterns. Adds the
+-- writes to commit c (creating it when nil). Returns c.
+function E:link_lane(c, lane)
+  local segs = self:segments()
+  for i = 1, #segs - 1 do
+    local A, B = segs[i], segs[i + 1]
+    local da, db = lane.data[A.pattern], lane.data[B.pattern]
+    if A.offset + A.len_g == B.offset and A.pattern ~= B.pattern and (A.editable or B.editable)
+        and da and db and da.exists and db.exists then
+      local a_end, b_start = P.max_t(A.lines), P.min_t()
+      local pa, pb
+      for k = #da.points, 1, -1 do
+        if da.points[k].t < a_end then pa = da.points[k] break end
+      end
+      for k = 1, #db.points do
+        if db.points[k].t > b_start then pb = db.points[k] break end
+      end
+      if pa and pb then
+        local ga, gb = T.global(A, pa.t), T.global(B, pb.t)
+        local function at(g) return pa.v + (pb.v - pa.v) * (g - ga) / (gb - ga) end
+        local ends = {
+          { seg = A, data = da, t = a_end, v = at(T.global(A, a_end)) },
+          { seg = B, data = db, t = b_start, v = at(T.global(B, b_start)) },
+        }
+        for _, e in ipairs(ends) do
+          if e.seg.editable then
+            local cur = nil
+            for k = 1, #e.data.points do
+              if e.data.points[k].t == e.t then cur = e.data.points[k] end
+            end
+            if not cur or math.abs(cur.v - e.v) > 1e-9 then
+              c = c or new_commit("Link patterns")
+              set_points(lane, e.seg.pattern, P.add(e.data.points, e.t, P.clamp_v(e.v), 0))
+              put_write(c, lane, e.seg.pattern, e.data.points)
+            end
+          end
+        end
+      end
+    end
+  end
+  return c
+end
+
+-- Add the border points of the lanes a commit touches (same undo step).
+function E:add_links(c)
+  if not self.link_patterns or not c then return c end
+  local seen = {}
+  local writes = {}
+  for i = 1, #c.writes do writes[i] = c.writes[i] end
+  for _, w in ipairs(writes) do
+    if not w.delete and not seen[w.key] then
+      seen[w.key] = true
+      local lane = self:lane(w.key)
+      if lane then self:link_lane(c, lane) end
+    end
+  end
+  return c
+end
+
+-- Link every visible lane now (when the option is turned on).
+function E:link_all()
+  local c
+  for _, lane in ipairs(self:visible_lanes()) do c = self:link_lane(c, lane) end
+  return c
+end
+
+-- Magnet to pattern borders, like the native editor: a time within a few
+-- pixels of a pattern start or end goes exactly onto it (the end is the
+-- last 1/256 of the last line), and the value then sticks to the value of
+-- the neighboring pattern at that border. Returns g, v, hit.
+E.MAGNET_PX = 8
+
+function E:magnet(g, v, lane)
+  local view = self.view
+  local zoom = (self.dims and self.dims.zoom) or 1
+  local tol = E.MAGNET_PX * zoom
+  local segs = self:segments()
+  local x = G.g_to_x(view, g)
+  local best, best_d, side, idx
+  for i = 1, #segs do
+    local sg = segs[i]
+    local b0, b1 = sg.offset, sg.offset + sg.len_g - 1
+    local d0 = math.abs(G.g_to_x(view, b0) - x)
+    local d1 = math.abs(G.g_to_x(view, b1) - x)
+    if d0 <= tol and (not best_d or d0 < best_d) then best, best_d, side, idx = b0, d0, "start", i end
+    if d1 <= tol and (not best_d or d1 < best_d) then best, best_d, side, idx = b1, d1, "end", i end
+  end
+  if not best then return g, v, false end
+  -- value of the neighboring pattern at the shared border
+  lane = lane or self:active_lane()
+  local nv
+  if lane then
+    local cur = segs[idx]
+    if side == "end" then
+      local nxt = segs[idx + 1]
+      local data = nxt and nxt.offset == cur.offset + cur.len_g and lane.data[nxt.pattern]
+      if data and #data.points > 0 then
+        nv = I.value_at(data.points, data.playmode or lane.playmode, P.min_t())
+      end
+    else
+      local prv = segs[idx - 1]
+      local data = prv and prv.offset + prv.len_g == cur.offset and lane.data[prv.pattern]
+      if data and #data.points > 0 then
+        nv = I.value_at(data.points, data.playmode or lane.playmode, P.max_t(prv.lines))
+      end
+    end
+  end
+  if nv and math.abs(G.v_to_y(view, nv) - G.v_to_y(view, v)) <= tol then v = nv end
+  return best, v, true
+end
+
 -- Intermediate commit of a running gesture (batch undo), or nil when live
 -- writes are off or the last one is too recent.
 function E:live_commit(desc, lane, patterns)
@@ -622,6 +747,18 @@ function E:on_drag(ev, fx)
         end
       end
     end
+    if not ev.mods.shift and gmin then
+      -- the magnet looks at the raw mouse time, not the grid snapped one
+      local raw = a.g + dx * view.span_g / view.width
+      local mg, mv, hit = self:magnet(raw, P.clamp_v(a.v + dv), lane)
+      if hit then
+        local mdt = mg - a.g
+        if gmin + mdt >= d.run[1] and gmax + mdt <= d.run[2] then
+          dt = mdt
+          if not ev.mods.control or dy ~= 0 then dv = mv - a.v end
+        end
+      end
+    end
     local anchor_pattern, anchor_t = a.pattern, a.t
     local new_sel = self:apply_move(lane, d, dt, dv)
     for i = 1, #d.items do
@@ -655,7 +792,12 @@ function E:on_drag(ev, fx)
     fx.redraw = true
   elseif d.kind == "line" then
     local g = self:clamp_g(P.snap_t(G.x_to_g(view, ev.x), d.grid))
-    d.x1, d.y1 = G.g_to_x(view, g), ev.y
+    local y = ev.y
+    if not ev.mods.shift then
+      local mg, mv, hit = self:magnet(self:clamp_g(G.x_to_g(view, ev.x)), G.y_to_v(view, ev.y))
+      if hit then g, y = mg, G.v_to_y(view, mv) end
+    end
+    d.x1, d.y1 = G.g_to_x(view, g), y
     fx.overlay = { line = { G.g_to_x(view, d.g0), G.v_to_y(view, d.v0), d.x1, d.y1 } }
     fx.redraw = true
   end
@@ -726,7 +868,9 @@ function E:on_up(ev, fx)
     fx.redraw = true
     local moved = math.abs(d.x1 - d.x0) > 3 or math.abs(d.y1 - d.y0) > 3
     if moved then
-      local g1 = self:clamp_g(P.snap_t(G.x_to_g(self.view, d.x1), d.grid))
+      local g1 = self:clamp_g(G.x_to_g(self.view, d.x1))
+      local mg, _, hit = self:magnet(g1, 0)
+      g1 = hit and mg or self:clamp_g(P.snap_t(g1, d.grid))
       local c = self:commit_line(d.g0, d.v0, g1, G.y_to_v(self.view, d.y1), d.grid)
       fx.commit = c
       fx.status = c and self:alias_message(c) or nil
@@ -755,6 +899,13 @@ function E:on_double(ev, fx)
   end
   t = P.snap_clamp_t(t, self:grid_now(ev.mods), seg.lines)
   local v = G.y_to_v(self.view, ev.y)
+  if not ev.mods.shift then
+    local mg, mv, hit = self:magnet(g, v, lane)
+    if hit then
+      local mseg, mt = T.locate(self.doc.timeline, mg)
+      if mseg == seg then t, v = mt, mv end
+    end
+  end
   local data = ensure_data(lane, seg)
   local c = new_commit("Add point")
   set_points(lane, seg.pattern, P.add(data.points, t, v, 0))

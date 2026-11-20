@@ -4,7 +4,7 @@ A Renoise tool that shows every graphical automation envelope of a track overlai
 
 ![The multi automation view in Renoise: three automation curves of one track overlaid, the active Width curve drawn on top with its points](docs/screenshots/main-view.webp)
 
-*Three automations of one track (Panning, Volume, Width) overlaid in Pattern + neighbours mode; the active curve is drawn on top with its points, the others are dimmed.*
+*Three automations of one track (Panning, Volume, Width) overlaid in Pattern + neighbors mode; the active curve is drawn on top with its points, the others are dimmed.*
 
 ## Requirements
 
@@ -46,7 +46,7 @@ The window has a toolbar, a legend on the left and the curve canvas.
 
 - *Current pattern*: the selected pattern, or the playing one when *Follow* is on and Renoise is playing.
 - *Pattern range*: several sequence positions side by side (From, To, *Song* for the whole song), with pattern separators and numbers. A pattern used more than once in the range is hatched and labelled *alias*; editing it changes every occurrence, and the status line says so. Pattern track aliases are resolved to their source pattern.
-- *Pattern + neighbours*: the current pattern is editable in the center, with 1 to 4 read-only neighbour patterns on each side.
+- *Pattern + neighbors*: the current pattern is editable in the center, with 1 to 4 read-only neighbor patterns on each side.
 
 **Tools:**
 
@@ -61,7 +61,7 @@ The window has a toolbar, a legend on the left and the curve canvas.
 
 | Input | Action |
 | --- | --- |
-| Shift while dragging | Fine move (one tenth), without snap |
+| Shift while dragging | Fine move (one tenth), without snap or magnet |
 | Ctrl while dragging | Constrain to one axis |
 | Alt + click on a point | Delete it |
 | Right-click | Context menu (see below); a right-click on a point selects it, it never deletes |
@@ -91,6 +91,10 @@ The window has a toolbar, a legend on the left and the curve canvas.
 
 The generated curves go from bottom to top; use Flip and Mirror to turn them around. Renoise does not document the exact behaviour of its own menu commands, so these follow their names and may differ in details.
 
+**Magnet.** Near a pattern start or end (a few pixels), a point you add, move or draw with the Line tool sticks exactly onto the border (the end is the last 1/256 of the last line), and its value sticks to the value of the neighboring pattern at that border, so two patterns can be joined precisely. Hold Shift to turn it off.
+
+**Link patterns** (right-click menu or Settings, off by default). Renoise plays each pattern's automation on its own: the value holds after the last point of a pattern and before the first point of the next. With *Link patterns* on, the tool keeps two border points on the straight line between the last point before each pattern border and the first point after it, so adjacent patterns read as one continuous line. They are added when the option is turned on and kept up to date after every edit, in the same undo step. Only editable patterns are written (in Pattern + neighbors mode, the center pattern only), and patterns used twice in a row are left alone.
+
 Other toolbar controls: *Snap* and the grid (Line, 1/2, 1/4, 1/8, Free), the interpolation of the active curve (Points, Lines, Curves), *Add lane* (menu of automatable parameters without automation), *Lock track* (keep showing this track), *Follow* (follow playback), *Fit* (show the whole range), *Legend*, *Settings*.
 
 **Zoom indicator.** The bottom left of the window always says how much of the time range is shown: `View: all 64 lines` when everything is visible, or for example `Zoom x16: Pat 2, lines 12 to 15 of 64` when zoomed in with Ctrl + wheel. The *Fit* button stays lit (theme selection color) as long as the whole range is shown, and turns back to a normal button as soon as you zoom in. While zoomed in, the pattern number is written on the canvas, even in Current pattern mode.
@@ -103,7 +107,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 
 **Window size.** Drag the grip in the bottom right corner of the window: the window follows the mouse and the status line shows its size. The size is kept as the Custom size in Settings.
 
-**Settings** (button): interface zoom (100 to 200 %), window size (Compact, Wide, Ultrawide, or a custom width and height), default tool, snap, inactive curve opacity, write while dragging, follow playback, diagnostics. The diagnostics line shows the number of curves and points drawn, average and worst render time of the canvas (Lua drawing time measured with `os.clock`) and the playhead update rate. It can also be toggled with the `Global > Tools > Toggle Multi Automation View Diagnostics` key binding.
+**Settings** (button): interface zoom (100 to 200 %), window size (Compact, Wide, Ultrawide, or a custom width and height), default tool, snap, inactive curve opacity, link patterns, write while dragging, follow playback, diagnostics. The diagnostics line shows the number of curves and points drawn, average and worst render time of the canvas (Lua drawing time measured with `os.clock`) and the playhead update rate. It can also be toggled with the `Global > Tools > Toggle Multi Automation View Diagnostics` key binding.
 
 ## Known limitations
 
@@ -113,7 +117,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 - Real values are approximate for some parameters (linear mapping only); plugin and non-linear parameters are shown as percentages.
 - Patterns used several times in the sequence share their automation: editing one occurrence changes all of them.
 - Hidden curves, colors and the active curve follow their track by name and device list. A track renamed and given other devices at the same time, while other tracks move, can lose its settings.
-- Points move across patterns only inside a run of editable patterns (Pattern range mode); neighbour patterns stay read only.
+- Points move across patterns only inside a run of editable patterns (Pattern range mode); neighbor patterns stay read only.
 - The playhead moves at the Renoise idle rate (about 10 times per second) and by whole lines.
 - Live writes during a drag rely on the Renoise batch undo to group them; check in Renoise that Ctrl + Z undoes a whole drag. If not, turn off *Write while dragging*.
 
@@ -127,7 +131,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 6. Ctrl + Z in Renoise undoes each gesture in one step.
 7. Edit a point in the native editor: the tool updates in under half a second, and the reverse.
 8. Change track, lock the track, delete a device, an automation, a track; load another song: no error in the scripting console.
-9. Play the song: the playhead moves, Follow scrolls the view; Pattern range and neighbours modes match the native editor.
+9. Play the song: the playhead moves, Follow scrolls the view; Pattern range and neighbors modes match the native editor.
 10. Ctrl + plus, Ctrl + minus, Ctrl + 0, the size presets on a 1920 x 1080 and a 3440 x 1440 screen.
 11. Close and reopen the window on the same song: the whole range is shown. Open the window: Fit is lit. Zoom in with Ctrl + wheel: Fit turns normal and the zoom indicator shows the visible lines; click Fit: the whole range comes back and Fit stays lit.
 12. Drag a point: the native Automation editor follows during the drag; Ctrl + Z undoes the whole drag; Esc during a drag restores the curve.
@@ -136,6 +140,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 15. Pattern range mode: drag a point into the next pattern. Range tool: copy a passage of every curve, paste it in another pattern, shift it, delete it.
 16. Drag the resize grip in the bottom right corner: the window follows the mouse in both directions, keeps the size after closing and reopening; release outside the window works too.
 17. Every entry of the right-click menu, and its shortcut; Ctrl + Z undoes each in one step.
+18. Magnet: drag a point to the end of a pattern, it sticks to the border and to the next pattern's value. Link patterns on: the curve is continuous across borders and stays so after edits.
 
 ## Development
 
