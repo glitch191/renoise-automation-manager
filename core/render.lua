@@ -429,6 +429,25 @@ function R.draw(ctx, scene)
     ctx.global_alpha = 255
   end
 
+  -- Range tool: time band over every lane
+  if scene.range then
+    local x0 = G.g_to_x(view, scene.range[1])
+    local x1 = G.g_to_x(view, scene.range[2])
+    if x1 >= 0 and x0 <= w then
+      x0, x1 = math.max(0, x0), math.min(w, x1)
+      ctx.fill_color = rgba(colors.selection, 40)
+      ctx:fill_rect(x0, 0, math.max(1, x1 - x0), h)
+      ctx.stroke_color = rgba(colors.selection, 200)
+      ctx.line_width = 1
+      ctx:begin_path()
+      ctx:move_to(math.floor(x0) + 0.5, 0)
+      ctx:line_to(math.floor(x0) + 0.5, h)
+      ctx:move_to(math.floor(x1) + 0.5, 0)
+      ctx:line_to(math.floor(x1) + 0.5, h)
+      ctx:stroke()
+    end
+  end
+
   -- Vectorize preview: simplified active curve, dashed, with its points
   if scene.preview and active then
     ctx.stroke_color = rgba(colors.selection, 230)

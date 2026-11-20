@@ -24,9 +24,9 @@ local R = require "core.render"
 local E = {}
 E.__index = E
 
-E.TOOLS = { "edit", "pencil", "line", "select" }
-E.TOOL_LABELS = { "Edit", "Pencil", "Line", "Select" }
-E.TOOL_KEYS = { e = "edit", p = "pencil", l = "line", s = "select" }
+E.TOOLS = { "edit", "pencil", "line", "range" }
+E.TOOL_LABELS = { "Edit", "Pencil", "Line", "Range" }
+E.TOOL_KEYS = { e = "edit", p = "pencil", l = "line", r = "range", s = "range" }
 -- Snap grid resolutions in sub-units: 1 line, 1/2, 1/4, 1/8, free.
 E.GRIDS = { 256, 128, 64, 32, 1 }
 E.GRID_LABELS = { "Line", "1/2", "1/4", "1/8", "Free" }
@@ -366,6 +366,10 @@ function E:on_down(ev, fx)
   self.just_activated = false
   if self.drag then return fx end
 
+  if ev.button == "right" and self.tool == "range" then
+    if self.range then fx.menu = "range" end
+    return fx
+  end
   -- delete: right click or Alt + left click on a point of the active lane
   if ev.button == "right" or (ev.button == "left" and ev.mods.alt) then
     local p = self:hit_point(x, y)
@@ -391,7 +395,17 @@ function E:on_down(ev, fx)
   if ev.button ~= "left" then return fx end
 
   local tool = self.tool
-  if tool == "edit" or tool == "select" then
+  if tool == "range" then
+    -- time range over every visible lane
+    if ev.button ~= "left" then return fx end
+    local g = self:clamp_g(P.snap_t(G.x_to_g(self.view, x), self:grid_now(ev.mods)))
+    self.range = nil
+    self.drag = { kind = "range", g0 = g, g1 = g, x0 = x }
+    fx.overlay = false
+    fx.redraw = true
+    return fx
+  end
+  if tool == "edit" then
     local p = self:hit_point(x, y)
     if p then
       if not p.seg.editable then
@@ -628,6 +642,11 @@ function E:on_drag(ev, fx)
     }
     self.hover_id = "drag"
     fx.redraw = true
+  elseif d.kind == "range" then
+    d.g1 = self:clamp_g(P.snap_t(G.x_to_g(view, ev.x), self:grid_now(ev.mods)))
+    self.range = { math.min(d.g0, d.g1), math.max(d.g0, d.g1) }
+    fx.status = self:range_message()
+    fx.redraw = true
   elseif d.kind == "rect" then
     d.x1, d.y1 = ev.x, ev.y
     fx.overlay = { rect = { d.x0, d.y0, d.x1, d.y1 } }
@@ -660,6 +679,14 @@ function E:on_up(ev, fx)
       for pattern in pairs(d.snap) do put_write(c, lane, pattern, lane.data[pattern].points) end
       fx.commit = c
       fx.status = self:alias_message(c)
+    end
+    fx.redraw = true
+  elseif d.kind == "range" then
+    if d.g0 == d.g1 then
+      self.range = nil
+    else
+      self.range = { math.min(d.g0, d.g1), math.max(d.g0, d.g1) }
+      fx.status = self:range_message()
     end
     fx.redraw = true
   elseif d.kind == "rect" then
@@ -710,7 +737,7 @@ function E:on_up(ev, fx)
 end
 
 function E:on_double(ev, fx)
-  if ev.button ~= "left" or (self.tool ~= "edit" and self.tool ~= "select") then return fx end
+  if ev.button ~= "left" or self.tool ~= "edit" then return fx end
   if self.just_activated then return fx end
   if self:hit_point(ev.x, ev.y) then return fx end
   local lane = self:active_lane()
@@ -847,6 +874,130 @@ function E:scale_selection(factor, mode, batch)
   return c
 end
 
+--------------------------------------------------------------------------------
+-- Range tool: a time range over every visible lane. Copy, cut, paste,
+-- delete and shift work on all those lanes at once (one undo step).
+
+function E:range_message()
+  local r = self.range
+  if not r then return nil end
+  local s0, t0 = T.locate(self.doc.timeline, r[1])
+  local s1, t1 = T.locate(self.doc.timeline, r[2])
+  if not s0 or not s1 then return nil end
+  return string.format("Range: Pat %d line %d to Pat %d line %d, %d lanes. Del, Ctrl + C, X, V, Left, Right, right-click menu.",
+    s0.pattern - 1, math.floor(t0 / P.UNITS) - 1, s1.pattern - 1, math.floor(t1 / P.UNITS) - 1, #self:visible_lanes())
+end
+
+-- Points of every visible lane inside [g0, g1], relative to g0.
+function E:range_items(g0, g1)
+  local out = {}
+  local segs = self:segments()
+  for _, lane in ipairs(self:visible_lanes()) do
+    local items, seen = {}, {}
+    for i = 1, #segs do
+      local s = segs[i]
+      local data = lane.data[s.pattern]
+      if data and s.offset + s.len_g > g0 and s.offset <= g1 then
+        for k = 1, #data.points do
+          local p = data.points[k]
+          local g = T.global(s, p.t)
+          if g >= g0 and g <= g1 and not seen[g] then
+            seen[g] = true
+            items[#items + 1] = { dg = g - g0, v = p.v, s = p.s or 0 }
+          end
+        end
+      end
+    end
+    table.sort(items, function(a, b) return a.dg < b.dg end)
+    out[lane.key] = items
+  end
+  return out
+end
+
+-- Replace [g, g + span] of one lane with items, in every editable pattern.
+function E:replace_lane_range(c, lane, g, span, items)
+  local g_end = g + span
+  local segs = self:segments()
+  for i = 1, #segs do
+    local s = segs[i]
+    local s0, s1 = s.offset, s.offset + s.len_g - 1
+    if s.editable and g_end >= s0 and g <= s1 then
+      local a, b = math.max(g, s0), math.min(g_end, s1)
+      local local_items = {}
+      for k = 1, #items do
+        local ig = g + items[k].dg
+        if ig >= a and ig <= b then
+          local_items[#local_items + 1] = { t = T.local_t(s, ig), v = items[k].v, s = items[k].s }
+        end
+      end
+      local data = lane.data[s.pattern]
+      if (data and data.exists) or #local_items > 0 then
+        data = ensure_data(lane, s)
+        set_points(lane, s.pattern, P.replace_range(data.points, T.local_t(s, a), T.local_t(s, b), local_items))
+        put_write(c, lane, s.pattern, data.points)
+      end
+    end
+  end
+end
+
+function E:copy_range()
+  local r = self.range
+  if not r then return false end
+  self.clipboard.range = { span = r[2] - r[1], lanes = self:range_items(r[1], r[2]) }
+  self.clipboard.last = "range"
+  return true
+end
+
+function E:delete_range(desc)
+  local r = self.range
+  if not r then return nil end
+  local c = new_commit(desc or "Delete range")
+  for _, lane in ipairs(self:visible_lanes()) do
+    self:replace_lane_range(c, lane, r[1], r[2] - r[1], {})
+  end
+  if #c.writes == 0 then return nil end
+  return c
+end
+
+function E:cut_range()
+  if not self:copy_range() then return nil end
+  return self:delete_range("Cut range")
+end
+
+function E:paste_range(g)
+  local clip = self.clipboard.range
+  if not clip then return nil end
+  g = g or self:clamp_g(P.snap_t(self.cursor_g or self.view.start_g, self:grid_now(nil)))
+  local c = new_commit("Paste range")
+  for key, items in pairs(clip.lanes) do
+    local lane = self:lane(key)
+    if lane and not lane.hidden then self:replace_lane_range(c, lane, g, clip.span, items) end
+  end
+  self.range = { g, math.min(self:total_g() - 1, g + clip.span) }
+  if #c.writes == 0 then return nil end
+  return c
+end
+
+-- Move the range content by dt (sub-units) in every visible lane.
+function E:shift_range(dt)
+  local r = self.range
+  if not r then return nil end
+  local span = r[2] - r[1]
+  local g = math.max(0, math.min(self:total_g() - 1 - span, r[1] + dt))
+  if g == r[1] then return nil end
+  local items = self:range_items(r[1], r[2])
+  local c = new_commit("Shift range")
+  for _, lane in ipairs(self:visible_lanes()) do
+    self:replace_lane_range(c, lane, r[1], span, {})
+  end
+  for _, lane in ipairs(self:visible_lanes()) do
+    self:replace_lane_range(c, lane, g, span, items[lane.key] or {})
+  end
+  self.range = { g, g + span }
+  if #c.writes == 0 then return nil end
+  return c
+end
+
 function E:copy()
   local lane = self:active_lane()
   if not lane or not self:has_selection() then return false end
@@ -873,6 +1024,7 @@ function E:copy()
     clip.items[i] = { dg = items[i].g - gmin, v = items[i].v, s = items[i].s }
   end
   self.clipboard.clip = clip
+  self.clipboard.last = "points"
   return true
 end
 
@@ -920,6 +1072,7 @@ function E:paste_at(g)
 end
 
 function E:paste()
+  if self.clipboard.last == "range" and self.clipboard.range then return self:paste_range() end
   local g = self.cursor_g or self.view.start_g
   return self:paste_at(self:clamp_g(P.snap_t(g, self:grid_now(nil))))
 end
@@ -1175,6 +1328,10 @@ end
 -- Returns handled, commit. The commit restores the song when the cancelled
 -- gesture was already written live.
 function E:cancel()
+  if self.range and not self.drag then
+    self.range = nil
+    return true
+  end
   if self.drag then
     local d = self.drag
     local lane = self:active_lane()
@@ -1217,7 +1374,13 @@ function E:key(name, mods)
   end
   local fx = { redraw = true }
   if mods.control and not mods.alt then
-    if name == "c" then
+    if name == "c" and self.range then
+      if self:copy_range() then fx.status = "Copied the range of every visible lane." end
+      return fx
+    elseif name == "x" and self.range then
+      fx.commit = self:cut_range()
+      return fx
+    elseif name == "c" then
       if self:copy() then fx.status = "Copied." end
       return fx
     elseif name == "x" then
@@ -1233,6 +1396,14 @@ function E:key(name, mods)
   if mods.alt then return nil end
   if name == "tab" then
     fx.activate = self:next_lane(mods.shift and -1 or 1)
+    return fx
+  elseif (name == "del" or name == "back") and self.range then
+    fx.commit = self:delete_range()
+    return fx
+  elseif (name == "left" or name == "right") and self.range then
+    local step = math.max(self:grid_now(mods), mods.shift and 1 or 16)
+    fx.commit = self:shift_range((name == "left") and -step or step)
+    fx.status = self:range_message()
     return fx
   elseif name == "del" or name == "back" then
     if not self:has_selection() then return nil end
@@ -1255,6 +1426,7 @@ function E:key(name, mods)
     return self:start_vectorize()
   elseif not mods.shift and E.TOOL_KEYS[name] then
     self.tool = E.TOOL_KEYS[name]
+    if self.tool ~= "range" then self.range = nil end
     self.line_anchor = nil
     fx.tool = self.tool
     return fx

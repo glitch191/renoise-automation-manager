@@ -246,7 +246,7 @@ function App:build()
   views.tool = vb:switch {
     items = E.TOOL_LABELS, width = L.W.tool, height = ch,
     value = self:tool_index(),
-    tooltip = "Tool: Edit (E), Pencil (P), Line (L), Select (S)",
+    tooltip = "Tool: Edit (E), Pencil (P), Line (L), Range (R): a time range over every visible lane, then Del, Ctrl + C, X, V, Left, Right or right-click",
     notifier = function(v) self:set_tool(v) end,
   }
   views.snap = vb:checkbox {
@@ -554,6 +554,7 @@ function App:render(ctx)
       cache = self.cache,
       overlay = self.overlay,
       preview = self.editor:preview_points(),
+      range = self.editor.range,
     }
     local stats = R.draw(ctx, scene)
     local dt = os.clock() - t0
@@ -880,6 +881,7 @@ function App:apply_fx(fx)
     self:after_view_change()
   end
   if fx.menu == "selection" then self:selection_menu() end
+  if fx.menu == "range" then self:range_menu() end
   if fx.redraw then self:request_redraw() end
 end
 
@@ -961,6 +963,10 @@ function App:set_tool(i)
   if self.updating then return end
   self.editor.tool = E.TOOLS[i]
   self.editor.line_anchor = nil
+  if self.editor.tool ~= "range" and self.editor.range then
+    self.editor.range = nil
+    self:request_redraw()
+  end
 end
 
 function App:set_snap(v)
@@ -1063,7 +1069,11 @@ function App:update_lock_button()
   if not v or not self.session then return end
   if self.session:locked() then
     v.lock.text = string.format("Locked: %02d", self.session:track_index())
-    v.lock.color = theme_color("selected_button_back")
+    -- the theme color name keeps the button in the theme selection color
+    if not pcall(function() v.lock.color = THEME.selection end) then
+      local col = theme_color(THEME.selection)
+      v.lock.color = { col[1], col[2], col[3] }
+    end
   else
     v.lock.text = "Lock track"
     v.lock.color = { 0, 0, 0 }
@@ -1116,6 +1126,25 @@ function App:add_lane_menu()
     }
   end
   renoise.app():show_menu(self.dialog, entries, self.views.add_lane)
+end
+
+function App:range_menu()
+  local ed = self.editor
+  local function run(fn)
+    return function()
+      local c = fn()
+      self:apply_fx({ commit = c, redraw = true, status = ed:range_message() })
+    end
+  end
+  local step = function() return math.max(ed:grid_now(), 16) end
+  local entries = {
+    { name = "Copy every visible lane (Ctrl + C)", invoke = function() ed:copy_range() end },
+    { name = "Cut every visible lane (Ctrl + X)", invoke = run(function() return ed:cut_range() end) },
+    { name = "Delete every visible lane (Del)", invoke = run(function() return ed:delete_range() end) },
+    { name = "--- Shift left by grid (Left)", invoke = run(function() return ed:shift_range(-step()) end) },
+    { name = "Shift right by grid (Right)", invoke = run(function() return ed:shift_range(step()) end) },
+  }
+  renoise.app():show_menu(self.dialog, entries)
 end
 
 function App:selection_menu()

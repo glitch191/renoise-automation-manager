@@ -330,7 +330,7 @@ T.test("tool keys and unhandled keys", function()
   local ed = setup(X.single(16, { lanes = 1 }))
   T.eq(ed:key("p", {}).tool, "pencil")
   T.eq(ed:key("l", {}).tool, "line")
-  T.eq(ed:key("s", {}).tool, "select")
+  T.eq(ed:key("s", {}).tool, "range")
   T.eq(ed:key("e", {}).tool, "edit")
   T.eq(ed:key("space", {}), nil, "space goes back to Renoise")
   T.eq(ed:key("del", {}), nil, "nothing selected")
@@ -552,4 +552,73 @@ T.test("neighbour patterns stay read only when moving", function()
   T.eq(#fx.commit.writes, 1)
   T.eq(fx.commit.writes[1].pattern, 1)
   T.eq(fx.commit.writes[1].points[1].t, 16 * 256, "clamped to the last line of the editable pattern")
+end)
+
+local function two_lane_range_doc()
+  local doc = X.doc({
+    { seq = 1, pattern = 1, lines = 16 },
+    { seq = 2, pattern = 2, lines = 16 },
+  }, { lanes = 2, points = 0 })
+  for i = 1, 2 do
+    local lane = doc.lanes[i]
+    lane.playmode = 2
+    lane.data[1] = { points = pts({ 256, 0.1 * i, 256 * 5, 0.2 * i, 256 * 9, 0.3 * i }), exists = true, rev = 1, lines = 16, playmode = 2 }
+    lane.data[2] = { points = pts({ 256, 0.4 }), exists = true, rev = 1, lines = 16, playmode = 2 }
+  end
+  return doc
+end
+
+T.test("Range tool selects a time range over every visible lane", function()
+  local doc = two_lane_range_doc()
+  local ed = setup(doc, { tool = "range" })
+  local xa = G.g_to_x(ed.view, 3 * 256)
+  local xb = G.g_to_x(ed.view, 6 * 256)
+  ed:mouse(ev("down", xa, 50))
+  ed:mouse(ev("drag", xb, 50))
+  local fx = ed:mouse(ev("up", xb, 50))
+  T.eq(ed.range, { 3 * 256, 6 * 256 })
+  T.ok(fx.status:find("^Range: Pat 0 line 3 to Pat 0 line 6, 2 lanes"), fx.status)
+  -- delete removes the line 4 point of both lanes in one commit
+  fx = ed:key("del", {})
+  T.eq(fx.commit.description, "Multi Automation: Delete range")
+  T.eq(#fx.commit.writes, 2)
+  for _, w in ipairs(fx.commit.writes) do T.eq(#w.points, 2) end
+end)
+
+T.test("Range copy and paste moves a passage of every lane", function()
+  local doc = two_lane_range_doc()
+  local ed = setup(doc, { tool = "range" })
+  ed.range = { 4 * 256, 9 * 256 }
+  ed:key("c", { control = true })
+  T.eq(ed.clipboard.last, "range")
+  ed.cursor_g = 16 * 256 + 2 * 256 -- line 2 of pattern 2
+  local fx = ed:key("v", { control = true })
+  T.eq(fx.commit.description, "Multi Automation: Paste range")
+  local by = {}
+  for _, w in ipairs(fx.commit.writes) do by[w.key .. ":" .. w.pattern] = w.points end
+  T.eq(by["lane1:2"], pts({ 256, 0.4, 256 * 3, 0.2, 256 * 7, 0.3 }))
+  T.eq(by["lane2:2"], pts({ 256, 0.4, 256 * 3, 0.4, 256 * 7, 0.6 }))
+end)
+
+T.test("Range shift moves the content and the range", function()
+  local doc = two_lane_range_doc()
+  local ed = setup(doc, { tool = "range" })
+  ed.range = { 4 * 256, 4 * 256 + 255 }
+  local fx = ed:key("right", {})
+  T.eq(fx.commit.description, "Multi Automation: Shift range")
+  T.eq(ed.range[1], 5 * 256)
+  local p = doc.lanes[1].data[1].points
+  T.eq(p, pts({ 256, 0.1, 256 * 6, 0.2, 256 * 9, 0.3 }))
+end)
+
+T.test("hidden lanes are left out of range edits; Esc clears the range", function()
+  local doc = two_lane_range_doc()
+  doc.lanes[2].hidden = true
+  local ed = setup(doc, { tool = "range" })
+  ed.range = { 3 * 256, 6 * 256 }
+  local fx = ed:key("del", {})
+  T.eq(#fx.commit.writes, 1)
+  T.eq(fx.commit.writes[1].key, "lane1")
+  ed:key("esc", {})
+  T.eq(ed.range, nil)
 end)
