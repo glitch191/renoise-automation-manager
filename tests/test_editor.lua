@@ -791,3 +791,39 @@ T.test("border point grabbed from the gray side moves and sticks to the previous
   T.eq(p[1].t, 256)
   T.eq(p[1].v, 0.55, "value of the previous pattern at the border")
 end)
+
+T.test("link patterns keeps the magnet result next to a read only neighbor", function()
+  local doc = X.doc({ { seq = 1, pattern = 1, lines = 64 }, { seq = 2, pattern = 2, lines = 64 } },
+    { lanes = 1, points = 0, editable = function(seq) return seq == 2 end })
+  local lane = doc.lanes[1]
+  lane.playmode = 2
+  lane.data[1] = { points = pts({ 256, 1, 256 * 60, 0.5, 64 * 256 + 255, 0.55 }), exists = true, rev = 1, lines = 64, playmode = 2 }
+  lane.data[2] = { points = pts({ 256, 0.45, 256 * 11, 0.4, 256 * 48, 0.25 }), exists = true, rev = 1, lines = 64, playmode = 2 }
+  local ed = setup(doc)
+  ed.live_writes = false
+  ed.link_patterns = true
+  local bx = G.g_to_x(ed.view, 64 * 256)
+  ed:mouse(ev("down", bx, G.v_to_y(ed.view, 0.45)))
+  local y2 = G.v_to_y(ed.view, 0.55) + 3
+  ed:mouse(ev("drag", bx, y2))
+  local fx = ed:mouse(ev("up", bx, y2))
+  ed:add_links(fx.commit) -- what the window does before writing
+  T.eq(lane.data[2].points[1].t, 256)
+  T.eq(lane.data[2].points[1].v, 0.55, "still on the previous pattern's end value")
+end)
+
+T.test("link patterns: the edited side leads when both patterns are editable", function()
+  local doc = two_pattern_doc({ 256, 0.1, 256 * 13, 0.2, P.max_t(16), 0.3 }, { 256, 0.3, 256 * 9, 0.4 })
+  local ed = setup(doc)
+  ed.link_patterns = true
+  -- move the start point of pattern 2 to 0.6: the end of pattern 1 follows
+  local lane = doc.lanes[1]
+  local c = { description = "x", batch = false, writes = {} }
+  lane.data[2].points = pts({ 256, 0.6, 256 * 9, 0.4 })
+  c.writes[1] = { key = lane.key, pattern = 2, points = lane.data[2].points }
+  ed:add_links(c)
+  local a = lane.data[1].points
+  T.eq(a[#a].t, P.max_t(16))
+  T.eq(a[#a].v, 0.6)
+  T.eq(lane.data[2].points[1].v, 0.6, "edited point kept")
+end)
