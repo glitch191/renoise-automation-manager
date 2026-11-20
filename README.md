@@ -52,7 +52,7 @@ The window has a toolbar, a legend on the left and the curve canvas.
 
 | Tool | Action |
 | --- | --- |
-| Edit (E) | Double-click: add a point. Drag a point: move it (in Pattern range mode, also into the next or previous pattern). Drag on empty space: rectangle selection. |
+| Edit (E) | Double-click: add a point, or delete the point under the mouse (like the native editor). Drag a point: move it (in Pattern range mode, also into the next or previous pattern). Drag on empty space: rectangle selection. |
 | Pencil (P) | Freehand drawing; points are created at the snap grid and replace the drawn range. |
 | Line (L) | Straight ramp between press and release (or two clicks); replaces the range, can cross patterns in Pattern range mode. |
 | Range (R) | Drag: select a time range over every visible curve. Del, Ctrl + C, Ctrl + X, Ctrl + V, Left, Right or the right-click menu then delete, copy, cut, paste or shift that passage in all those curves at once, in one undo step. Hidden curves are left alone. |
@@ -63,7 +63,7 @@ The window has a toolbar, a legend on the left and the curve canvas.
 | --- | --- |
 | Shift while dragging | Fine move (one tenth), without snap or magnet |
 | Ctrl while dragging | Constrain to one axis |
-| Alt + click on a point | Delete it |
+| Double-click or Alt + click on a point | Delete it |
 | Right-click | Context menu (see below); a right-click on a point selects it, it never deletes |
 | Alt + wheel (Alt + Shift + wheel) | Scale selected values around center (from bottom) |
 | Left, Right | Shift the selection by one grid step (Shift: 1/256 line) |
@@ -126,7 +126,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 1. Install the `.xrnx` (drag and drop), open the tool from the Tools menu, the Track Automation menu and the shortcut.
 2. On a track with 8 automations: 8 distinct curves; hide one in the legend, it disappears; save, close and reopen the song: hidden state and colors are restored.
 3. Click near an inactive curve: it becomes active, no point changes; Tab cycles curves; the native Automation editor follows.
-4. Double-click adds a point, drag moves it (with Shift and Ctrl), Alt + click deletes it, right-click opens the menu without deleting, snap grid works.
+4. Double-click adds a point, double-click on a point deletes it, drag moves it (with Shift and Ctrl), Alt + click deletes it, right-click opens the menu without deleting, snap grid works.
 5. Pencil, Line (also across two patterns in Pattern range mode), rectangle selection, scale, shift, copy and paste to another curve and pattern, interpolation change, Add lane.
 6. Ctrl + Z in Renoise undoes each gesture in one step.
 7. Edit a point in the native editor: the tool updates in under half a second, and the reverse.

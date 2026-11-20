@@ -885,7 +885,25 @@ end
 function E:on_double(ev, fx)
   if ev.button ~= "left" or self.tool ~= "edit" then return fx end
   if self.just_activated then return fx end
-  if self:hit_point(ev.x, ev.y) then return fx end
+  -- double-click on a point deletes it, like the native editor
+  local hit = self:hit_point(ev.x, ev.y)
+  if hit then
+    if not hit.seg.editable then
+      fx.status = E.MSG_READ_ONLY
+      return fx
+    end
+    self.drag = nil
+    local c = new_commit("Delete point")
+    set_points(hit.lane, hit.pattern, P.remove_times(hit.lane.data[hit.pattern].points, { hit.t }))
+    put_write(c, hit.lane, hit.pattern, hit.lane.data[hit.pattern].points)
+    if self.selection[hit.pattern] then self.selection[hit.pattern][hit.t] = nil end
+    self.hover_id = nil
+    fx.hover = false
+    fx.commit = c
+    fx.status = self:alias_message(c)
+    fx.redraw = true
+    return fx
+  end
   local lane = self:active_lane()
   if not lane then
     fx.status = (#self:visible_lanes() == 0) and E.MSG_NO_LANE or E.MSG_NO_ACTIVE
