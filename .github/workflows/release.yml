@@ -1,0 +1,67 @@
+name: Release
+
+# Runs the tests, builds the .xrnx and attaches it (with its SHA-256 checksum)
+# to a published GitHub release. A manual run (workflow_dispatch) builds the
+# archive and keeps it as a workflow artifact instead.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up the MSVC environment (needed to build Lua on Windows)
+        uses: step-security/msvc-dev-cmd@v1
+
+      - name: Install Lua 5.1.5
+        uses: leafo/gh-actions-lua@v13
+        with:
+          luaVersion: "5.1.5"
+
+      - name: Run the tests
+        shell: pwsh
+        run: ./scripts/test.ps1
+
+      - name: Choose the version tag
+        id: tag
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "release") {
+            $tag = "${{ github.event.release.tag_name }}"
+          } else {
+            $tag = "v0.0.${{ github.run_number }}"
+          }
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Build the archive
+        id: build
+        shell: pwsh
+        run: ./scripts/build-xrnx.ps1 -Tag "${{ steps.tag.outputs.tag }}" -Checksum
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.tag.outputs.tag }}" "${{ steps.build.outputs.archive }}" "${{ steps.build.outputs.checksum }}" --clobber
+
+      - name: Keep as a workflow artifact (manual run)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: xrnx-${{ steps.tag.outputs.tag }}
+          path: |
+            ${{ steps.build.outputs.archive }}
+            ${{ steps.build.outputs.checksum }}
+          if-no-files-found: error
