@@ -15,7 +15,7 @@ L.ZOOM_STEP = 0.25
 
 -- Window size presets (dialog content size in Renoise view units).
 L.PRESETS = {
-  { name = "Compact", width = 1240, height = 420 },   -- fits 1280 x 720
+  { name = "Compact", width = 1180, height = 420 },   -- fits 1280 x 720
   { name = "Wide", width = 1800, height = 520 },      -- fits 1920 x 1080 (default)
   { name = "Ultrawide", width = 3300, height = 640 }, -- uses 3440 x 1440
 }
@@ -32,7 +32,6 @@ L.TOOLBAR = {
   { id = "tool", width = 196 },
   { id = "snap", width = 94, checkbox = true }, -- "Snap" text 30 + grid popup 64
   { id = "interp", width = 136 },
-  { id = "vectorize", width = 64 },
   { id = "add_lane", width = 64 },
   { id = "lock", width = 80 },
   { id = "follow", width = 40, checkbox = true }, -- "Follow" text

@@ -264,11 +264,6 @@ function App:build()
     tooltip = "Interpolation (Playmode) of the active lane in the editable patterns",
     notifier = function(v) self:set_playmode(v) end,
   }
-  views.vectorize = vb:button {
-    text = "Vectorize", width = L.W.vectorize, height = ch,
-    tooltip = "Vectorize (V): preview the active lane (or the selection) as Lines without the points a straight line already follows. Wheel: tolerance, Enter or click: apply, Esc: cancel",
-    notifier = function() self:vectorize() end,
-  }
   views.add_lane = vb:button {
     text = "Add lane", width = L.W.add_lane, height = ch,
     tooltip = "Create a new automation for an automatable parameter of this track",
@@ -305,7 +300,7 @@ function App:build()
     views = {
       views.mode, views.mode_extra, views.tool,
       vb:row { views = { views.snap, vb:text { text = "Snap", width = 30, height = ch }, views.grid } },
-      views.interp, views.vectorize, views.add_lane, views.lock,
+      views.interp, views.add_lane, views.lock,
       vb:row { views = { views.follow, vb:text { text = "Follow", width = L.W.follow, height = ch } } },
       views.fit, views.legend_toggle, views.settings,
     },

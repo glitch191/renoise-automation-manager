@@ -57,7 +57,7 @@ The window has a toolbar, a legend on the left and the curve canvas.
 | Line (L) | Straight ramp between press and release (or two clicks); replaces the range, can cross patterns in Pattern range mode. |
 | Range (R) | Drag: select a time range over every visible curve. Del, Ctrl + C, Ctrl + X, Ctrl + V, Left, Right or the right-click menu then delete, copy, cut, paste or shift that passage in all those curves at once, in one undo step. Hidden curves are left alone. |
 
-**Vectorize** (button or V) turns stepped automation (for example recorded plugin moves in Points mode) into a few clean ramps. It first shows a preview: the simplified curve is drawn dashed over the active curve and the status line gives the point count. The wheel (or Up and Down) changes the tolerance, from 0 to 25 % of the parameter range; Enter, V or a left click applies (the curve switches to Lines, one undo step); Esc or a right click cancels. With selected points, only those can be removed.
+**Vectorize** (V, or the right-click menu of a selection) turns stepped automation (for example recorded plugin moves in Points mode) into a few clean ramps. It first shows a preview: the simplified curve is drawn dashed over the active curve and the status line gives the point count. The wheel (or Up and Down) changes the tolerance, from 0 to 25 % of the parameter range; Enter, V or a left click applies (the curve switches to Lines, one undo step); Esc or a right click cancels. With selected points, only those can be removed.
 
 **Mouse and keys:**
 
@@ -78,7 +78,7 @@ The window has a toolbar, a legend on the left and the curve canvas.
 | Ctrl + plus, Ctrl + minus, Ctrl + 0 | Interface zoom up, down, back to 125 % |
 | Esc | Cancel the gesture, the Vectorize preview, the range or the selection; close the window |
 
-Other toolbar controls: *Snap* and the grid (Line, 1/2, 1/4, 1/8, Free), the interpolation of the active curve (Points, Lines, Curves), *Vectorize*, *Add lane* (menu of automatable parameters without automation), *Lock track* (keep showing this track), *Follow* (follow playback), *Fit* (show the whole range), *Legend*, *Settings*.
+Other toolbar controls: *Snap* and the grid (Line, 1/2, 1/4, 1/8, Free), the interpolation of the active curve (Points, Lines, Curves), *Add lane* (menu of automatable parameters without automation), *Lock track* (keep showing this track), *Follow* (follow playback), *Fit* (show the whole range), *Legend*, *Settings*.
 
 **Zoom indicator.** The bottom left of the window always says how much of the time range is shown: `View: all 64 lines` when everything is visible, or for example `Zoom x16: Pat 2, lines 12 to 15 of 64` when zoomed in with Ctrl + wheel. The *Fit* button stays lit (theme selection color) as long as the whole range is shown, and turns back to a normal button as soon as you zoom in. While zoomed in, the pattern number is written on the canvas, even in Current pattern mode.
 
