@@ -10,6 +10,7 @@
 local G = require "core.geometry"
 local I = require "core.interp"
 local P = require "core.points"
+local F = require "core.valuefmt"
 
 local R = {}
 
@@ -157,6 +158,57 @@ function R.segment_labels(view, segments, show_single)
     local text = string.format("%d: Pat %d", s.seq - 1, s.pattern - 1)
     if s.alias then text = text .. " (alias)" end
     out[#out + 1] = { x = x, text = text, alias = s.alias, editable = s.editable }
+  end
+  return out
+end
+
+-- Time ruler: line numbers (0-based) along the canvas, spaced at least
+-- min_px apart, stepping by powers of two lines. When zoomed inside a line,
+-- quarter positions are labelled "+64", "+128", "+192" (1/256 line units).
+-- Returns { { x, text } }, at most `max` items.
+function R.ruler_labels(view, segments, min_px, max)
+  min_px = min_px or 40
+  max = max or 64
+  local out = {}
+  local px_per_line = view.width * P.UNITS / view.span_g
+  local step = 1
+  while px_per_line * step < min_px do step = step * 2 end
+  local quarters = px_per_line / 4 >= min_px
+  local g0, g1 = view.start_g, view.start_g + view.span_g
+  for i = 1, #segments do
+    local s = segments[i]
+    if s.offset + s.len_g >= g0 and s.offset <= g1 then
+      local first = math.max(0, math.floor((g0 - s.offset) / P.UNITS))
+      local last = math.min(s.lines - 1, math.floor((g1 - s.offset) / P.UNITS))
+      first = math.floor(first / step) * step
+      for line = first, last, step do
+        local g = s.offset + line * P.UNITS
+        if g >= g0 and g <= g1 then
+          out[#out + 1] = { x = G.g_to_x(view, g), text = tostring(line) }
+          if #out >= max then return out end
+        end
+        if quarters then
+          for k = 64, 192, 64 do
+            local gq = g + k
+            if gq >= g0 and gq <= g1 then
+              out[#out + 1] = { x = G.g_to_x(view, gq), text = "+" .. k, sub = true }
+              if #out >= max then return out end
+            end
+          end
+        end
+      end
+    end
+  end
+  return out
+end
+
+-- Value axis of the active lane: real values (or percentages) at the five
+-- value guides. Returns { { y, text } } from bottom (0) to top (1).
+function R.axis_labels(view, info)
+  local out = {}
+  for k = 0, 4 do
+    local v = k / 4
+    out[#out + 1] = { y = G.v_to_y(view, v), text = F.value(info, v), v = v }
   end
   return out
 end

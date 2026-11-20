@@ -16,6 +16,7 @@ App.__index = App
 
 App.TITLE = "renoise-automation-manager"
 App.LABEL_POOL = 24
+App.RULER_POOL = 48
 App.STATUS_SECONDS = 6
 
 local function log(msg)
@@ -380,6 +381,19 @@ function App:build()
     views.seg_labels[i] = t
     children[#children + 1] = t
   end
+  -- time ruler (line numbers along the bottom) and value axis (left)
+  views.ruler = {}
+  for i = 1, App.RULER_POOL do
+    local t = vb:text { text = "", font = "mono", style = "disabled", height = d.label_h, visible = false }
+    views.ruler[i] = t
+    children[#children + 1] = t
+  end
+  views.axis = {}
+  for i = 1, 5 do
+    local t = vb:text { text = "", font = "mono", style = "disabled", height = d.label_h, visible = false }
+    views.axis[i] = t
+    children[#children + 1] = t
+  end
   children[#children + 1] = views.label
 
   views.canvas = vb:canvas {
@@ -599,6 +613,7 @@ function App:update_labels()
   local segs = self.editor:segments()
   local zinfo = R.zoom_info(self.view, segs, self.editor:total_g())
   self:update_zoom_indicator(zinfo)
+  self:update_ruler(segs)
   -- when zoomed in, always name the pattern under the view, even in
   -- Current pattern mode
   local labels = R.segment_labels(self.view, segs, zinfo.zoomed)
@@ -733,9 +748,50 @@ function App:activate(key)
   self:request_redraw()
 end
 
+-- Line numbers along the bottom of the canvas.
+function App:update_ruler(segs)
+  local pool = self.views and self.views.ruler
+  if not pool then return end
+  local d = self.d
+  local labels = R.ruler_labels(self.view, segs, math.floor(44 * d.zoom), #pool)
+  local y = math.max(0, d.canvas_h - d.label_h - 1)
+  for i = 1, #pool do
+    local lab, t = labels[i], pool[i]
+    if lab and lab.x >= 0 and lab.x < d.canvas_w - 8 then
+      t.text = lab.text
+      t.origin = { x = math.floor(lab.x + 2), y = y }
+      t.visible = true
+    else
+      t.visible = false
+    end
+  end
+end
+
+-- Real values (or percentages) of the active lane at the value guides.
+function App:update_axis()
+  local pool = self.views and self.views.axis
+  if not pool then return end
+  local lane = self.editor and self.editor:active_lane()
+  local labels = lane and R.axis_labels(self.view, lane.info) or {}
+  local d = self.d
+  for i = 1, #pool do
+    local lab, t = labels[i], pool[i]
+    if lab then
+      local y = math.floor(lab.y - d.label_h / 2)
+      y = math.max(0, math.min(d.canvas_h - 2 * d.label_h - 2, y))
+      t.text = lab.text
+      t.origin = { x = math.floor(4 * d.zoom), y = y }
+      t.visible = true
+    else
+      t.visible = false
+    end
+  end
+end
+
 function App:refresh_interp()
   local v = self.views
   if not v then return end
+  self:update_axis()
   local mode = self.editor:active_playmode()
   self.updating = true
   v.interp.active = mode ~= nil

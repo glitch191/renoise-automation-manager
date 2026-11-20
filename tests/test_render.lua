@@ -164,3 +164,32 @@ T.test("zoom_info across two patterns", function()
   view.start_g, view.span_g = 30 * 256, 4 * 256
   T.eq(R.zoom_info(view, segs, 64 * 256).text, "Zoom x16: Pat 0 line 30 to Pat 1 line 1 (Fit shows all)")
 end)
+
+T.test("ruler labels adapt their step to the zoom", function()
+  local G = require "core.geometry"
+  local segs = { { seq = 1, pattern = 1, offset = 0, len_g = 64 * 256, lines = 64 } }
+  local view = G.new_view(1000, 300, 6, 64 * 256)
+  local labs = R.ruler_labels(view, segs, 40)
+  -- 1000 px for 64 lines: 15.6 px per line, step 4 lines (62.5 px)
+  T.eq(labs[1].text, "0")
+  T.eq(labs[2].text, "4")
+  T.eq(#labs, 16)
+  view.start_g, view.span_g = 0, 256 -- one line over 1000 px
+  labs = R.ruler_labels(view, segs, 40)
+  T.eq(labs[1].text, "0")
+  T.eq(labs[2].text, "+64")
+  T.eq(labs[2].sub, true)
+end)
+
+T.test("axis labels show real values or percentages", function()
+  local G = require "core.geometry"
+  local view = G.new_view(1000, 300, 6, 256)
+  local native = { name = "Panning", device_path = "Audio/Effects/Native/Gainer", value_min = 0, value_max = 100, value_quantum = 0 }
+  local labs = R.axis_labels(view, native)
+  T.eq(#labs, 5)
+  T.eq(labs[1].text, "0")
+  T.eq(labs[5].text, "100")
+  T.ok(labs[5].y < labs[1].y, "top above bottom")
+  local plugin = { name = "Mix", device_path = "Audio/Effects/VST3/X", value_min = 0, value_max = 1 }
+  T.eq(R.axis_labels(view, plugin)[3].text, "50.0 %")
+end)
