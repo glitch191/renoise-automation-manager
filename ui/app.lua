@@ -414,6 +414,10 @@ function App:build()
   -- view model sized for the canvas
   local total = (self.session and self.session.doc and self.session.doc.timeline.total_g) or 256
   local view = G.new_view(d.canvas_w, d.canvas_h, d.pad, total)
+  -- A fresh window (not a rebuild that keeps its view) must fit the first
+  -- document it shows. Without this, reopening the window on an unchanged
+  -- song kept the placeholder one line view.
+  if not self.view_state then self.view_signature = nil end
   if self.view_state then
     view.start_g, view.span_g = self.view_state.start_g, self.view_state.span_g
     G.clamp(view, total)

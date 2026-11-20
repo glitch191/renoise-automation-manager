@@ -258,3 +258,33 @@ T.test("toolbar actions: modes, lock, legend, add lane, settings", function()
   end)
   no_errors()
 end)
+
+T.test("reopening the window on the same song shows the whole range", function()
+  local song = make_song()
+  load_tool(song)
+  run(function()
+    local function zoom_text(dlg)
+      local z = find(dlg.content, function(v) return v.kind == "text" and v.text and (v.text:find("^View:") or v.text:find("^Zoom")) end)
+      return z and z.text
+    end
+    env.entries[1].invoke()
+    local dlg = env.dialogs[#env.dialogs]
+    T.eq(zoom_text(dlg), "View: all 16 lines")
+    local fit = find(dlg.content, function(v) return v.kind == "button" and v.text == "Fit" end)
+    T.eq(fit.color, "selected_button_back", "Fit lit while fitted")
+    -- close with the window button, then open again
+    dlg.visible = false
+    env.tool.app_idle_observable:fire()
+    env.entries[1].invoke()
+    local dlg2 = env.dialogs[#env.dialogs]
+    T.ok(dlg2 ~= dlg, "new dialog")
+    T.eq(zoom_text(dlg2), "View: all 16 lines")
+    -- zoom in: Fit turns normal
+    local canvas = canvas_of(dlg2)
+    mouse(canvas, "wheel", 100, 10, nil, { control = true })
+    local fit2 = find(dlg2.content, function(v) return v.kind == "button" and v.text == "Fit" end)
+    T.eq(fit2.color, { 0, 0, 0 })
+    T.ok(zoom_text(dlg2):find("^Zoom"), zoom_text(dlg2))
+  end)
+  no_errors()
+end)
