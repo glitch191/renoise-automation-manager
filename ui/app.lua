@@ -151,7 +151,11 @@ function App:start_session()
   self.app_observers:clear("theme")
   self.app_observers:add("theme", renoise.app().theme_observable, function()
     self.colors = nil
-    if self.views then self:refresh_legend() end
+    self.zoomed_state = nil
+    if self.views then
+      self:refresh_legend()
+      self:update_labels()
+    end
     self:request_redraw()
   end, "theme")
 end
@@ -280,7 +284,7 @@ function App:build()
   }
   views.fit = vb:button {
     text = "Fit", width = L.W.fit, height = ch,
-    tooltip = "Fit: show the whole time range (highlighted while the view is zoomed in)",
+    tooltip = "Fit: show the whole time range (lit while the whole range is shown)",
     notifier = function() self:fit() end,
   }
   views.legend_toggle = vb:button {
@@ -606,8 +610,10 @@ function App:update_labels()
   end
 end
 
--- Zoom indicator: text under the canvas and a highlighted Fit button while
--- the view does not show the whole time range.
+-- Zoom indicator: text under the canvas, and the Fit button drawn as
+-- selected (theme color, like the active tool) while the view shows the whole
+-- time range. Any zoom or scroll that hides part of it turns Fit back to a
+-- normal button.
 function App:update_zoom_indicator(info)
   local v = self.views
   if not v or not v.zoom then return end
@@ -615,12 +621,15 @@ function App:update_zoom_indicator(info)
   v.zoom.style = info.zoomed and "strong" or "disabled"
   if info.zoomed ~= self.zoomed_state then
     self.zoomed_state = info.zoomed
-    local c = { 0, 0, 0 } -- default button color
     if info.zoomed then
-      local ok, col = pcall(theme_color, THEME.selection)
-      c = (ok and col) and { col[1], col[2], col[3] } or { 220, 120, 40 }
+      pcall(function() v.fit.color = { 0, 0, 0 } end) -- theme default
+    else
+      local ok = pcall(function() v.fit.color = THEME.selection end)
+      if not ok then
+        local col = theme_color(THEME.selection)
+        pcall(function() v.fit.color = { col[1], col[2], col[3] } end)
+      end
     end
-    pcall(function() v.fit.color = c end)
   end
 end
 

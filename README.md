@@ -79,7 +79,7 @@ The window has a toolbar, a legend on the left and the curve canvas.
 
 Other toolbar controls: *Snap* and the grid (Line, 1/2, 1/4, 1/8, Free), the interpolation of the active curve (Points, Lines, Curves), *Vectorize*, *Add lane* (menu of automatable parameters without automation), *Lock track* (keep showing this track), *Follow* (follow playback), *Fit* (show the whole range), *Legend*, *Settings*.
 
-**Zoom indicator.** The bottom left of the window always says how much of the time range is shown: `View: all 64 lines` when everything is visible, or for example `Zoom x16: Pat 2, lines 12 to 15 of 64` when zoomed in with Ctrl + wheel. While zoomed in, the *Fit* button is highlighted and the pattern number is written on the canvas, even in Current pattern mode.
+**Zoom indicator.** The bottom left of the window always says how much of the time range is shown: `View: all 64 lines` when everything is visible, or for example `Zoom x16: Pat 2, lines 12 to 15 of 64` when zoomed in with Ctrl + wheel. The *Fit* button stays lit (theme selection color) as long as the whole range is shown, and turns back to a normal button as soon as you zoom in. While zoomed in, the pattern number is written on the canvas, even in Current pattern mode.
 
 Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Renoise, named for example `Multi Automation: Move points`.
 
@@ -111,7 +111,7 @@ Every gesture (a drag, a pencil stroke, a line, a paste) is one undo step in Ren
 8. Change track, lock the track, delete a device, an automation, a track; load another song: no error in the scripting console.
 9. Play the song: the playhead moves, Follow scrolls the view; Pattern range and neighbours modes match the native editor.
 10. Ctrl + plus, Ctrl + minus, Ctrl + 0, the size presets on a 1920 x 1080 and a 3440 x 1440 screen.
-11. Zoom in with Ctrl + wheel: the zoom indicator and the highlighted Fit button show it; Fit brings back the whole range.
+11. Open the window: Fit is lit. Zoom in with Ctrl + wheel: Fit turns normal and the zoom indicator shows the visible lines; click Fit: the whole range comes back and Fit stays lit.
 
 ## Development
 
