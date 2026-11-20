@@ -281,7 +281,7 @@ T.test("reopening the window on the same song shows the whole range", function()
     T.eq(zoom_text(dlg2), "View: all 16 lines")
     -- zoom in: Fit turns normal
     local canvas = canvas_of(dlg2)
-    mouse(canvas, "wheel", 100, 10, nil, { control = true })
+    canvas.mouse_handler({ type = "wheel", direction = "up", position = { x = 100, y = 10 }, modifier_flags = { control = true }, button_flags = {} })
     local fit2 = find(dlg2.content, function(v) return v.kind == "button" and v.text == "Fit" end)
     T.eq(fit2.color, { 0, 0, 0 })
     T.ok(zoom_text(dlg2):find("^Zoom"), zoom_text(dlg2))
